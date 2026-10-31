@@ -10,12 +10,13 @@ Enter the BIOS by pressing **`Del`** (or `Esc`) repeatedly right after power-on.
 | **iGPU Configuration** | Advanced → GFX Configuration | `Auto` (= 64 GB carve-out) | **`UMA_SPECIFIED`** | Unlocks the size option below |
 | **UMA Frame buffer Size** | Advanced → GFX Configuration (appears after the above) | – | **smallest offered (512M if listed, else 1G)** | The GPU then borrows RAM dynamically (GTT, up to 120 GB). `evo doctor` flags it if wrong |
 | **Auto Power On** | Advanced (top of the page) | `Power Off` | **`Power On`** | The server comes back by itself after a power cut |
-| **Power Mode Select** | Main (bottom), also shown in Advanced → Hardware Monitor | `Automatic Mode` | **`Performance`** | 140 W ceiling for long LLM runs and games; idle draw stays low |
+| **Power Mode Select** (TDP) | Main (bottom of the page) | | **`Performance`** | 140 W ceiling for long LLM runs and games; idle draw stays low |
+| Power Mode Select (**fans**) | Advanced → Hardware Monitor | `Automatic Mode` | **`Automatic Mode`** (keep) | Despite the same name, this is the *fan* mode: `Automatic` or `Manual PWM`. Automatic stops the fans at idle (silent server) and ramps them up under load |
 | Boot order | Boot | | USB first for the install, then the Bazzite entry | |
 
 Leave *Wake on lan*, *USB Boot* and *Trusted Computing* as they are.
 
-**No fan curve:** *Advanced → Hardware Monitor* only shows temperatures, two fan speeds (0 RPM at idle, the fans stop below ~45 °C) and *Power Mode Select*. There are no manual fan controls in this BIOS, so fan behaviour follows the power mode. If load noise or temperatures are a problem, use `evo mode quiet`.
+**Fans:** *Advanced → Hardware Monitor* shows temperatures, two fan speeds (0 RPM at idle) and the fan mode. `Automatic Mode` is the vendor curve; `Manual PWM Mode` exposes a fixed/custom duty instead. Start with Automatic. Only try Manual PWM if temperatures under sustained LLM load go above ~90 °C (watch Grafana), and photograph its options so they can be documented here.
 
 ## Recommended
 
