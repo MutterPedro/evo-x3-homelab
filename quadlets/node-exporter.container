@@ -1,0 +1,21 @@
+# Prometheus node_exporter: CPU/RAM/temps (hwmon) and GPU busy/GTT/VRAM (drm).
+[Unit]
+Description=Prometheus node exporter
+
+[Container]
+Image=docker.io/prom/node-exporter:latest
+ContainerName=node-exporter
+Network=host
+PodmanArgs=--pid=host
+Volume=/proc:/host/proc:ro
+Volume=/sys:/host/sys:ro
+Volume=/:/host/root:ro
+SecurityLabelDisable=true
+Exec=--path.procfs=/host/proc --path.sysfs=/host/sys --path.rootfs=/host/root --web.listen-address=127.0.0.1:@EVO_NODE_EXPORTER_PORT@ --collector.drm --collector.hwmon
+AutoUpdate=registry
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target

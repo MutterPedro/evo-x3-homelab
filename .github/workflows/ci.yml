@@ -1,0 +1,22 @@
+name: ci
+on:
+  push:
+  pull_request:
+
+jobs:
+  lint-and-render:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        run: shellcheck -S warning -x install.sh bin/evo bin/evo-notify tests/render-test.sh
+      - name: python deps
+        run: pip install pyyaml jsonschema
+      - name: fetch llama-swap (latest release)
+        run: |
+          ver=$(curl -fsSL https://api.github.com/repos/mostlygeek/llama-swap/releases/latest | jq -r .tag_name | sed 's/^v//')
+          mkdir -p /tmp/ls
+          curl -fsSL "https://github.com/mostlygeek/llama-swap/releases/download/v${ver}/llama-swap_${ver}_linux_amd64.tar.gz" | tar -xz -C /tmp/ls
+          curl -fsSL -o /tmp/ls/config-schema.json "https://raw.githubusercontent.com/mostlygeek/llama-swap/v${ver}/config-schema.json"
+      - name: render templates and boot llama-swap with them
+        run: tests/render-test.sh /tmp/ls/llama-swap

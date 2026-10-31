@@ -1,0 +1,23 @@
+# llama-swap: one OpenAI/Anthropic-compatible endpoint for every local model.
+# Starts model containers on demand and swaps them in and out of GPU memory.
+[Unit]
+Description=llama-swap model router (http://evo-x3:@EVO_LLAMA_SWAP_PORT@)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=@EVO_CONFIG_DIR@/runtime.env
+EnvironmentFile=@EVO_CONFIG_DIR@/secrets.env
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=%h/.local/bin/llama-swap -config @EVO_CONFIG_DIR@/llama-swap.yaml -listen 0.0.0.0:@EVO_LLAMA_SWAP_PORT@ -watch-config
+# Re-apply the profile / pause state that `evo` saved before the restart.
+ExecStartPost=-%h/.local/bin/evo _restore-state
+# Make sure no model container outlives llama-swap.
+ExecStopPost=-/bin/sh -c 'podman ps -q --filter name=^evo- | xargs -r podman stop -t 10'
+Restart=always
+RestartSec=5
+TimeoutStopSec=180
+
+[Install]
+WantedBy=default.target

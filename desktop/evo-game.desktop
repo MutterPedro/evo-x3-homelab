@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=EVO: Game mode
+Comment=Unload AI models and switch to maximum power for gaming
+Icon=input-gaming
+Exec=@BIN_DIR@/evo-notify game
+Terminal=false
+Categories=System;Utility;

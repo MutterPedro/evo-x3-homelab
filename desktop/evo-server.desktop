@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=EVO: Server mode
+Comment=Turn the AI server back on (balanced power)
+Icon=network-server
+Exec=@BIN_DIR@/evo-notify server
+Terminal=false
+Categories=System;Utility;

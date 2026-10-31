@@ -1,0 +1,19 @@
+# Prometheus scrape config (rendered by install.sh).
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Host: CPU, RAM, temperatures (hwmon), GPU busy % and GTT/VRAM use (drm).
+  - job_name: node
+    static_configs:
+      - targets: ["127.0.0.1:@EVO_NODE_EXPORTER_PORT@"]
+
+  # llama-swap: tokens/s per request, loaded models, GPU power/temp.
+  - job_name: llama-swap
+    metrics_path: /metrics
+    authorization:
+      type: Bearer
+      credentials: "@LLAMA_SWAP_KEY@"
+    static_configs:
+      - targets: ["127.0.0.1:@EVO_LLAMA_SWAP_PORT@"]

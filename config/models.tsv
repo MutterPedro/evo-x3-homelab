@@ -1,0 +1,8 @@
+# name	hf_repo	include_patterns (space separated)	approx_GB	in_default_set	description
+qwen3.8-flash-next	unsloth/Qwen3.8-Flash-Next-GGUF	UD-IQ4_XS/* mmproj-F16.gguf mtp-Qwen3.8-Flash-Next-Q8_0.gguf	100	yes	Smart: 125B-A6B, vision, best open model that fits
+gpt-oss-120b	unsloth/gpt-oss-120b-GGUF	gpt-oss-120b-F16.gguf	65	yes	Fast: OpenAI open-weight 120B, reliable tools
+qwen3.6-35b-a3b	unsloth/Qwen3.6-35B-A3B-GGUF	Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf mmproj-F16.gguf	23	yes	Coder: fast MoE with vision
+gemma-4-26b-a4b	unsloth/gemma-4-26B-A4B-it-qat-GGUF	gemma-4-26B-A4B-it-qat-UD-Q4_K_XL.gguf mmproj-F16.gguf	16	yes	Family chat + vision, great Portuguese
+qwen3-embedding-0.6b	Qwen/Qwen3-Embedding-0.6B-GGUF	Qwen3-Embedding-0.6B-Q8_0.gguf	1	yes	Embeddings for RAG
+whisper-large-v3-turbo	ggerganov/whisper.cpp	ggml-large-v3-turbo-q8_0.bin	1	yes	Speech to text
+qwen3.8-flash-next-iq3	unsloth/Qwen3.8-Flash-Next-GGUF	UD-IQ3_XXS/* mmproj-F16.gguf mtp-Qwen3.8-Flash-Next-Q8_0.gguf	87	no	Smaller Flash-Next quant (82 GB) if you want room for a second model

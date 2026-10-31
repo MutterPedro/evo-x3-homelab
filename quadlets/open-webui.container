@@ -1,0 +1,20 @@
+# Open WebUI: ChatGPT-style web app for the household (http://evo-x3:@EVO_WEBUI_PORT@)
+[Unit]
+Description=Open WebUI
+Wants=llama-swap.service searxng.service
+After=llama-swap.service searxng.service network-online.target
+
+[Container]
+Image=ghcr.io/open-webui/open-webui:main
+ContainerName=open-webui
+Network=host
+Volume=@EVO_AI_DIR@/open-webui:/app/backend/data:Z
+EnvironmentFile=@EVO_CONFIG_DIR@/open-webui.env
+AutoUpdate=registry
+
+[Service]
+Restart=always
+TimeoutStartSec=900
+
+[Install]
+WantedBy=default.target

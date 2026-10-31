@@ -1,0 +1,261 @@
+# llama-swap configuration for the EVO-X3 (Ryzen AI Max+ 395, 128 GB).
+#
+# This is a TEMPLATE. `./install.sh user` renders it to
+# ~/.config/evo/llama-swap.yaml, replacing only the @EVO_*@ placeholders.
+# Everything written as ${...} is left for llama-swap itself:
+#   ${PORT}, ${MODEL_ID}  - assigned per model by llama-swap
+#   ${env.NAME}           - read from the environment at start-up
+#                           (~/.config/evo/runtime.env and secrets.env)
+#
+# Each model runs in its own rootless podman container that llama-swap starts
+# on first request and stops on unload. The capacity router (bottom of file)
+# keeps as many models loaded at once as fit in the GPU memory pool.
+#
+# Reference: https://github.com/mostlygeek/llama-swap/blob/main/docs/config.example.yaml
+
+healthCheckTimeout: 900        # big models take minutes to load from disk
+logLevel: info
+startPort: 10001
+sendLoadingState: true         # chat UIs show "loading model..." instead of hanging
+globalTTL: 0                   # never unload just because of idleness (server!)
+unloadTimeout: 20
+maxRequestBodyMB: 250
+
+apiKeys:
+  - "${env.LLAMA_SWAP_KEY}"
+
+macros:
+  # --- container launchers -------------------------------------------------
+  # GPU access for rootless podman: /dev/dri (Vulkan) + /dev/kfd (ROCm).
+  # keep-groups passes the host user's video/render membership into the container.
+  "gpu-run": >-
+    podman run --rm --replace --name evo-${MODEL_ID}
+    --device /dev/dri --device /dev/kfd
+    --userns=keep-id --group-add keep-groups
+    --security-opt label=disable --security-opt seccomp=unconfined
+    --ipc=host
+    -v @EVO_MODELS_DIR@:/models:ro
+    -p 127.0.0.1:${PORT}:${PORT}
+  "stop": "podman stop -t 15 evo-${MODEL_ID}"
+
+  "vulkan": "@EVO_IMG_VULKAN@"
+  "rocm": "@EVO_IMG_ROCM@"
+
+  # --- llama-server flags every model shares ---------------------------------
+  # -fa on + --load-mode none are the Strix Halo essentials (flash attention,
+  # weights resident in GPU memory instead of mmap'd from disk).
+  "llama": >-
+    llama-server --host 0.0.0.0 --port ${PORT}
+    -ngl 999 -fa on --load-mode none --jinja
+    --metrics --no-webui --cache-reuse 256
+
+  "m": "/models"
+
+models:
+  # ===========================================================================
+  # SMART: Qwen3.8 Flash-Next 125B-A6B (vision + reasoning + coding)
+  # ~94 GB at UD-IQ4_XS. Top open model that fits in 128 GB (Oct 2026).
+  # Multi-token prediction (MTP) speculative decoding gives ~1.3-1.7x speed.
+  # ===========================================================================
+  "qwen3.8-flash-next":
+    name: "Qwen3.8 Flash-Next 125B (smart)"
+    description: "Best quality. Vision, tools, long context. Uses most of the GPU memory."
+    capacities: { gpu: 102 }
+    evict_cost: 50              # slow to reload (~94 GB), keep it if possible
+    concurrencyLimit: 4
+    cmd: |
+      ${gpu-run} ${vulkan}
+      ${llama}
+      -m ${m}/unsloth/Qwen3.8-Flash-Next-GGUF/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf
+      --mmproj ${m}/unsloth/Qwen3.8-Flash-Next-GGUF/mmproj-F16.gguf
+      --model-draft ${m}/unsloth/Qwen3.8-Flash-Next-GGUF/mtp-Qwen3.8-Flash-Next-Q8_0.gguf
+      --spec-type draft-mtp --spec-draft-n-max 3
+      -c 131072 -ctk q8_0 -ctv q8_0 --parallel 1
+      --temp 1.0 --top-p 0.95 --top-k 20 --min-p 0.0
+    cmdStop: ${stop}
+    filters:
+      setParamsByID:
+        "${MODEL_ID}:instruct":
+          chat_template_kwargs: { enable_thinking: false }
+          temperature: 0.7
+          top_p: 0.8
+          presence_penalty: 1.5
+
+  # ===========================================================================
+  # FAST: gpt-oss-120b (MXFP4, ~65 GB). Very reliable tool calling.
+  # ===========================================================================
+  "gpt-oss-120b":
+    name: "gpt-oss 120B (fast)"
+    description: "OpenAI open-weight reasoning model. Strong tool use, ~35-55 tok/s."
+    capacities: { gpu: 70 }
+    evict_cost: 30
+    cmd: |
+      ${gpu-run} ${vulkan}
+      ${llama}
+      -m ${m}/unsloth/gpt-oss-120b-GGUF/gpt-oss-120b-F16.gguf
+      -c 131072 --parallel 2
+      --temp 1.0 --top-p 1.0 --top-k 0
+    cmdStop: ${stop}
+    filters:
+      setParamsByID:
+        "${MODEL_ID}":
+          chat_template_kwargs: { reasoning_effort: medium }
+        "${MODEL_ID}:high":
+          chat_template_kwargs: { reasoning_effort: high }
+        "${MODEL_ID}:low":
+          chat_template_kwargs: { reasoning_effort: low }
+
+  # ===========================================================================
+  # CODE: Qwen3.6 35B-A3B (~22 GB). ~60 tok/s, good agentic coder, has vision.
+  # ===========================================================================
+  "qwen3.6-35b-a3b":
+    name: "Qwen3.6 35B-A3B (coder)"
+    description: "Fast MoE for coding agents and autocomplete-style use."
+    capacities: { gpu: 27 }
+    evict_cost: 5
+    cmd: |
+      ${gpu-run} ${vulkan}
+      ${llama}
+      -m ${m}/unsloth/Qwen3.6-35B-A3B-GGUF/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf
+      --mmproj ${m}/unsloth/Qwen3.6-35B-A3B-GGUF/mmproj-F16.gguf
+      -c 131072 --parallel 2 -ctk q8_0 -ctv q8_0
+      --temp 0.6 --top-p 0.95 --top-k 20 --min-p 0.0
+    cmdStop: ${stop}
+
+  # ===========================================================================
+  # FAMILY / VISION: Gemma 4 26B-A4B QAT (~14 GB). Fast, multilingual (pt-BR),
+  # good image understanding, low factual-error rate in summaries.
+  # ===========================================================================
+  "gemma-4-26b-a4b":
+    name: "Gemma 4 26B-A4B (family & vision)"
+    description: "Everyday chat, Portuguese, image understanding. ~50-100 tok/s."
+    capacities: { gpu: 19 }
+    evict_cost: 5
+    cmd: |
+      ${gpu-run} ${vulkan}
+      ${llama}
+      -m ${m}/unsloth/gemma-4-26B-A4B-it-qat-GGUF/gemma-4-26B-A4B-it-qat-UD-Q4_K_XL.gguf
+      --mmproj ${m}/unsloth/gemma-4-26B-A4B-it-qat-GGUF/mmproj-F16.gguf
+      -c 131072 --parallel 4
+      --temp 1.0 --top-p 0.95 --top-k 64
+    cmdStop: ${stop}
+
+  # ===========================================================================
+  # EMBEDDINGS for RAG (Open WebUI documents / knowledge bases)
+  # ===========================================================================
+  "qwen3-embedding-0.6b":
+    name: "Qwen3 Embedding 0.6B"
+    description: "Text embeddings for document search (RAG)."
+    capacities: { gpu: 3 }
+    evict_cost: 1
+    cmd: |
+      ${gpu-run} ${vulkan}
+      llama-server --host 0.0.0.0 --port ${PORT} -ngl 999 --load-mode none
+      -m ${m}/Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf
+      --embeddings -c 32768 -b 8192 -ub 8192 --parallel 4 --no-webui
+    cmdStop: ${stop}
+
+  # ===========================================================================
+  # SPEECH-TO-TEXT: whisper.cpp large-v3-turbo (OpenAI /v1/audio/transcriptions)
+  # ===========================================================================
+  "whisper-large-v3-turbo":
+    name: "Whisper large-v3-turbo"
+    description: "Speech to text."
+    capacities: { gpu: 3 }
+    evict_cost: 1
+    ttl: 900
+    checkEndpoint: /
+    cmd: |
+      ${gpu-run} --entrypoint whisper-server @EVO_IMG_UNIFIED@
+      --host 0.0.0.0 --port ${PORT}
+      -m ${m}/ggerganov/whisper.cpp/ggml-large-v3-turbo-q8_0.bin
+      --inference-path /v1/audio/transcriptions --convert
+    cmdStop: ${stop}
+
+  # ===========================================================================
+  # TEXT-TO-SPEECH: Kokoro (CPU only, no GPU memory). OpenAI /v1/audio/speech
+  # Voices include pt-BR "pf_dora" and English "af_heart".
+  # ===========================================================================
+  "kokoro-tts":
+    name: "Kokoro TTS"
+    description: "Text to speech (CPU)."
+    capacities: { gpu: 0 }
+    ttl: 900
+    checkEndpoint: /docs
+    useModelName: "kokoro"
+    cmd: |
+      podman run --rm --replace --name evo-${MODEL_ID}
+      -p 127.0.0.1:${PORT}:8880
+      @EVO_IMG_KOKORO@
+    cmdStop: ${stop}
+
+  # ===========================================================================
+  # IMAGE / VIDEO: ComfyUI (ROCm build for gfx1151). Open http://evo-x3:8080/comfyui/
+  # Unloads itself after 10 idle minutes so the LLMs get their memory back.
+  # ===========================================================================
+  "comfyui_auto":
+    capacities: { gpu: 64 }
+    evict_cost: 1
+    ttl: 600
+    unloadTimeout: 30
+    unlisted: true
+    checkEndpoint: /
+    cmd: |
+      podman run --rm --replace --name evo-comfyui
+      --device /dev/dri --device /dev/kfd
+      --userns=keep-id --group-add keep-groups
+      --security-opt label=disable --security-opt seccomp=unconfined --ipc=host
+      -e HOME=/comfyhome
+      -v @EVO_COMFY_DIR@:/comfyhome
+      -v @EVO_CONFIG_DIR@/comfyui-extra-model-paths.yaml:/opt/ComfyUI/extra_model_paths.yaml:ro
+      -p 127.0.0.1:${PORT}:8188
+      @EVO_IMG_COMFYUI@
+      /opt/venv/bin/python /opt/ComfyUI/main.py --listen 0.0.0.0 --port 8188
+      --output-directory /comfyhome/comfy-outputs
+      --disable-mmap --gpu-only --disable-smart-memory --cache-none --bf16-vae
+    cmdStop: podman stop -t 30 evo-comfyui
+
+# ---------------------------------------------------------------------------
+# Profiles: clients ask for the stable names "chat", "code", "vision", "fast".
+# `evo profile <name>` flips what they point at, with no client changes.
+# ---------------------------------------------------------------------------
+profiles:
+  smart:
+    description: "Best quality: Qwen3.8 Flash-Next for everything, Gemma for quick replies"
+    pins:
+      chat: "qwen3.8-flash-next"
+      code: "qwen3.8-flash-next"
+      vision: "qwen3.8-flash-next"
+      fast: "gemma-4-26b-a4b"
+  fast:
+    description: "Speed: gpt-oss-120b + Qwen3.6 coder + Gemma vision, all loaded together"
+    pins:
+      chat: "gpt-oss-120b"
+      code: "qwen3.6-35b-a3b"
+      vision: "gemma-4-26b-a4b"
+      fast: "qwen3.6-35b-a3b"
+  multi:
+    description: "Many small models at once, leaves ~60 GB free for ComfyUI image/video"
+    pins:
+      chat: "gemma-4-26b-a4b"
+      code: "qwen3.6-35b-a3b"
+      vision: "gemma-4-26b-a4b"
+      fast: "gemma-4-26b-a4b"
+
+hooks:
+  on_startup:
+    profile: "@EVO_DEFAULT_PROFILE@"
+
+# ---------------------------------------------------------------------------
+# Capacity router: any set of models whose `capacities.gpu` adds up to less
+# than the pool can stay loaded together. When a new model does not fit, the
+# cheapest-to-reload models (lowest evict_cost) are unloaded first.
+# Units are GiB of unified memory.
+# ---------------------------------------------------------------------------
+routing:
+  router:
+    use: capacity
+    settings:
+      capacity:
+        pools:
+          gpu: @EVO_GPU_POOL_GIB@

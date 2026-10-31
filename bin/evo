@@ -1,0 +1,387 @@
+#!/usr/bin/env bash
+# evo -- day-to-day control of the EVO-X3 homelab.
+#
+#   evo status                     What is loaded, memory, temps, power mode
+#   evo mode game|server|quiet     One-command switch between gaming and serving
+#   evo profile [smart|fast|multi] Which models "chat"/"code"/"vision"/"fast" use
+#   evo run -- <command>           Steam launch wrapper: game mode while it runs
+#   evo models list|pull|du        Manage downloaded models
+#   evo bench <model>              Quick tokens/s measurement through the API
+#   evo backup init|run|list       Encrypted backups to Google Drive (restic)
+#   evo secret api-key|grafana     Print a generated secret
+#   evo logs [service]             Follow logs (default: llama-swap)
+#   evo update                     Update repo, configs, images, llama-swap
+#   evo doctor                     Check the whole setup and explain problems
+set -euo pipefail
+
+SELF="$(readlink -f "${BASH_SOURCE[0]}")"
+REPO_DIR="$(cd "$(dirname "$SELF")/.." && pwd)"
+EVO_CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/evo"
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/evo"
+STATE_FILE="$STATE_DIR/state.env"
+export PATH="$HOME/.local/bin:/home/linuxbrew/.linuxbrew/bin:$PATH"
+
+c_b=$'\e[1m'; c_g=$'\e[32m'; c_y=$'\e[33m'; c_r=$'\e[31m'; c_d=$'\e[2m'; c_0=$'\e[0m'
+[[ -t 1 ]] || { c_b=; c_g=; c_y=; c_r=; c_d=; c_0=; }
+die()  { echo "${c_r}error:${c_0} $*" >&2; exit 1; }
+info() { echo "${c_b}$*${c_0}"; }
+
+[[ -f "$EVO_CONFIG_DIR/evo.env" ]] || die "not installed yet: run ./install.sh user"
+set -a
+# shellcheck source=/dev/null
+source "$EVO_CONFIG_DIR/evo.env"
+# shellcheck source=/dev/null
+[[ -f "$EVO_CONFIG_DIR/secrets.env" ]] && source "$EVO_CONFIG_DIR/secrets.env"
+set +a
+API="http://127.0.0.1:${EVO_LLAMA_SWAP_PORT}"
+
+# ---------------------------------------------------------------------------
+# helpers
+# ---------------------------------------------------------------------------
+api() { # api METHOD PATH [JSON]
+  local m="$1" p="$2" d="${3:-}"
+  local -a args=(-fsS -X "$m" -H "Authorization: Bearer ${LLAMA_SWAP_KEY}" --max-time 30)
+  [[ -n "$d" ]] && args+=(-H 'Content-Type: application/json' -d "$d")
+  curl "${args[@]}" "$API$p"
+}
+api_up() { curl -fsS --max-time 2 "$API/health" >/dev/null 2>&1; }
+wait_api() { local _; for _ in $(seq 1 "${1:-60}"); do api_up && return 0; sleep 1; done; return 1; }
+
+save_state() { # save_state KEY VALUE
+  mkdir -p "$STATE_DIR"; touch "$STATE_FILE"
+  grep -v "^$1=" "$STATE_FILE" >"$STATE_FILE.tmp" || true
+  echo "$1=$2" >>"$STATE_FILE.tmp"; mv "$STATE_FILE.tmp" "$STATE_FILE"
+}
+get_state() { [[ -f "$STATE_FILE" ]] && grep -m1 "^$1=" "$STATE_FILE" | cut -d= -f2- || true; }
+
+gpu_dev() { local d; for d in /sys/class/drm/card*/device; do [[ -f "$d/mem_info_gtt_total" ]] && { echo "$d"; return; }; done; }
+gib() { awk -v b="${1:-0}" 'BEGIN{printf "%.1f", b/1073741824}'; }
+hwmon_by_name() { local h; for h in /sys/class/hwmon/hwmon*; do [[ "$(cat "$h/name" 2>/dev/null)" == "$1" ]] && { echo "$h"; return; }; done; }
+
+set_power() { # set_power <tuned-profile>
+  if command -v tuned-adm >/dev/null; then
+    tuned-adm profile "$1" 2>/dev/null || sudo tuned-adm profile "$1"
+  elif command -v powerprofilesctl >/dev/null; then
+    case "$1" in *performance*) powerprofilesctl set performance ;; *powersave*) powerprofilesctl set power-saver ;; *) powerprofilesctl set balanced ;; esac
+  fi
+}
+current_power() {
+  local p=""; command -v tuned-adm >/dev/null && p="$(tuned-adm active 2>/dev/null | sed 's/.*: //')"
+  local pp=""; [[ -r /sys/firmware/acpi/platform_profile ]] && pp=" (platform_profile: $(cat /sys/firmware/acpi/platform_profile))"
+  echo "${p:-unknown}$pp"
+}
+
+model_line() { grep -v '^#' "$REPO_DIR/config/models.tsv" | awk -F'\t' -v n="$1" '$1==n'; }
+hf_cmd() {
+  if command -v hf >/dev/null; then echo hf
+  elif command -v uvx >/dev/null; then echo "uvx --from huggingface_hub hf"
+  else die "need 'hf' or 'uvx' (brew install uv)"; fi
+}
+
+# ---------------------------------------------------------------------------
+# commands
+# ---------------------------------------------------------------------------
+cmd_status() {
+  local d; d="$(gpu_dev)"
+  info "EVO-X3  $(date '+%F %T')"
+  echo "  mode:      $(get_state MODE || true)${c_d} (evo mode game|server|quiet)${c_0}"
+  echo "  power:     $(current_power)"
+  if [[ -n "$d" ]]; then
+    echo "  GPU mem:   GTT $(gib "$(cat "$d/mem_info_gtt_used")") / $(gib "$(cat "$d/mem_info_gtt_total")") GiB," \
+         "carve-out VRAM $(gib "$(cat "$d/mem_info_vram_used")") / $(gib "$(cat "$d/mem_info_vram_total")") GiB," \
+         "busy $(cat "$d/gpu_busy_percent" 2>/dev/null || echo ?)%"
+  fi
+  local mt ma; mt=$(awk '/MemTotal/{print $2*1024}' /proc/meminfo); ma=$(awk '/MemAvailable/{print $2*1024}' /proc/meminfo)
+  echo "  RAM:       $(gib "$((mt-ma))") used / $(gib "$mt") GiB"
+  local k a; k="$(hwmon_by_name k10temp)"; a="$(hwmon_by_name amdgpu)"
+  [[ -n "$k" ]] && echo "  CPU temp:  $(( $(cat "$k/temp1_input") / 1000 ))°C"
+  if [[ -n "$a" ]]; then
+    local pw=""; for f in power1_average power1_input; do [[ -r "$a/$f" ]] && { pw="$(( $(cat "$a/$f") / 1000000 ))W"; break; }; done
+    echo "  APU:       $(( $(cat "$a/temp1_input" 2>/dev/null || echo 0) / 1000 ))°C ${pw:+, package power $pw}"
+  fi
+  echo
+  if api_up; then
+    local prof running
+    prof="$(api GET /api/profiles 2>/dev/null | jq -r '.active // "none"' 2>/dev/null || echo '?')"
+    info "llama-swap  ${c_g}up${c_0}  profile: $prof"
+    running="$(api GET /running | jq -r '.running[]? | "  \(.model)\t\(.state)"' 2>/dev/null || true)"
+    if [[ -n "$running" ]]; then echo "$running" | column -t -s $'\t'; else echo "  (no models loaded; they load on first request)"; fi
+  else
+    info "llama-swap  ${c_r}down${c_0}  (systemctl --user status llama-swap)"
+  fi
+  echo
+  info "services"
+  local s
+  for s in llama-swap open-webui searxng grafana prometheus node-exporter; do
+    printf '  %-14s %s\n' "$s" "$(systemctl --user is-active "$s" 2>/dev/null || true)"
+  done
+}
+
+cmd_mode() {
+  local m="${1:-}"
+  case "$m" in
+    game)
+      info "Game mode: unloading all models, pausing the API, max power"
+      api_up && api POST /api/models/pause >/dev/null && echo "  models unloaded; API answers 503 until 'evo mode server'"
+      set_power "$EVO_TUNED_GAME"
+      sync; echo "  power: $(current_power)"
+      save_state MODE game ;;
+    server)
+      info "Server mode: API back on, balanced power"
+      api_up && api POST /api/models/resume >/dev/null
+      set_power "$EVO_TUNED_SERVER"
+      save_state MODE server
+      preload_chat & disown || true
+      echo "  power: $(current_power); loading the 'chat' model in the background" ;;
+    quiet)
+      info "Quiet mode: models unload, load again on demand, low power"
+      api_up && { api POST /api/models/resume >/dev/null; api POST /api/models/unload >/dev/null; }
+      set_power "$EVO_TUNED_QUIET"
+      save_state MODE quiet
+      echo "  power: $(current_power)" ;;
+    *) die "usage: evo mode game|server|quiet" ;;
+  esac
+}
+
+preload_chat() {
+  # Touching /upstream/<model>/health starts the model without sending a prompt.
+  local target
+  target="$(api GET /api/profiles 2>/dev/null | jq -r '.active as $a | .profiles[]? | select(.id == $a) | .pins.chat // empty' 2>/dev/null || true)"
+  [[ -n "$target" ]] || return 0
+  curl -fsS -H "Authorization: Bearer ${LLAMA_SWAP_KEY}" --max-time 900 "$API/upstream/$target/health" >/dev/null 2>&1 || true
+}
+
+cmd_profile() {
+  local p="${1:-}"
+  if [[ -z "$p" ]]; then
+    api GET /api/profiles | jq -r '"active: \(.active // "none")", (.profiles[] | "  \(.id): \(.description)\n    " + ([.pins | to_entries[] | "\(.key) -> \(.value)"] | join(", ")))'
+    return
+  fi
+  [[ "$p" =~ ^(smart|fast|multi)$ ]] || die "profiles: smart | fast | multi"
+  api PUT /api/profiles/active "{\"name\":\"$p\"}" >/dev/null
+  save_state PROFILE "$p"
+  info "profile -> $p"
+  echo "  clients asking for chat/code/vision/fast now get the '$p' models"
+}
+
+cmd_restore_state() {
+  # Called by llama-swap.service after (re)start.
+  wait_api 120 || exit 0
+  local p m
+  p="$(get_state PROFILE)"; m="$(get_state MODE)"
+  [[ -n "$p" ]] && api PUT /api/profiles/active "{\"name\":\"$p\"}" >/dev/null || true
+  [[ "$m" == "game" ]] && api POST /api/models/pause >/dev/null || true
+}
+
+cmd_run() {
+  # Steam: Properties -> Launch options:  evo run -- %command%
+  [[ "${1:-}" == "--" ]] && shift
+  (($#)) || die "usage: evo run -- <command>"
+  local prev; prev="$(get_state MODE)"
+  cmd_mode game >/dev/null 2>&1 || true
+  local rc=0
+  "$@" || rc=$?
+  case "$prev" in
+    quiet) cmd_mode quiet >/dev/null 2>&1 || true ;;
+    game)  : ;;
+    *)     cmd_mode server >/dev/null 2>&1 || true ;;
+  esac
+  return "$rc"
+}
+
+cmd_models() {
+  local sub="${1:-list}"; shift || true
+  case "$sub" in
+    list)
+      printf '%-26s %-6s %-9s %s\n' MODEL GB ON-DISK DESCRIPTION
+      grep -v '^#' "$REPO_DIR/config/models.tsv" | while IFS=$'\t' read -r name repo _ gb _ desc; do
+        local have="-"; [[ -d "$EVO_MODELS_DIR/$repo" ]] && have="$(du -sh "$EVO_MODELS_DIR/$repo" 2>/dev/null | cut -f1)"
+        printf '%-26s %-6s %-9s %s\n' "$name" "$gb" "$have" "$desc"
+      done ;;
+    pull)
+      local -a names=("$@")
+      (( ${#names[@]} )) || die "usage: evo models pull <name...>|default"
+      if [[ "${names[0]}" == "default" ]]; then
+        mapfile -t names < <(grep -v '^#' "$REPO_DIR/config/models.tsv" | awk -F'\t' '$5=="yes"{print $1}')
+      fi
+      local hf; hf="$(hf_cmd)"
+      local n line repo inc
+      for n in "${names[@]}"; do
+        line="$(model_line "$n")"; [[ -n "$line" ]] || die "unknown model '$n' (see: evo models list)"
+        repo="$(cut -f2 <<<"$line")"; inc="$(cut -f3 <<<"$line")"
+        info "downloading $n  ($repo: $inc)"
+        # shellcheck disable=SC2086
+        HF_XET_HIGH_PERFORMANCE=1 $hf download "$repo" --include $inc --local-dir "$EVO_MODELS_DIR/$repo"
+      done ;;
+    du) du -sh "$EVO_MODELS_DIR"/*/* 2>/dev/null | sort -h ;;
+    *) die "usage: evo models list|pull|du" ;;
+  esac
+}
+
+cmd_bench() {
+  local model="${1:-chat}" prompt="${2:-Write a 400-word story about a lighthouse keeper.}"
+  info "benchmarking '$model' (first call includes load time)"
+  local t0 out
+  t0=$(date +%s)
+  out="$(curl -fsS --max-time 1800 -H "Authorization: Bearer ${LLAMA_SWAP_KEY}" -H 'Content-Type: application/json' \
+    "$API/v1/chat/completions" -d "$(jq -n --arg m "$model" --arg p "$prompt" \
+      '{model:$m, messages:[{role:"user",content:$p}], max_tokens:512, stream:false}')")"
+  echo "  wall time: $(( $(date +%s) - t0 ))s"
+  jq -r '.timings // empty | "  prompt: \(.prompt_n) tok @ \(.prompt_per_second|floor) tok/s\n  output: \(.predicted_n) tok @ \(.predicted_per_second*10|floor/10) tok/s"' <<<"$out" \
+    || jq -r '.usage' <<<"$out"
+}
+
+backup_env() {
+  export RESTIC_REPOSITORY="$EVO_BACKUP_REPO" RESTIC_PASSWORD
+  command -v restic >/dev/null || die "restic missing (brew install restic)"
+}
+cmd_backup() {
+  local sub="${1:-run}"
+  backup_env
+  case "$sub" in
+    init) restic init ;;
+    run)
+      info "backup -> $RESTIC_REPOSITORY"
+      local was_up=0
+      systemctl --user is-active -q open-webui && was_up=1
+      # Stop Open WebUI briefly so its SQLite database is consistent.
+      ((was_up)) && systemctl --user stop open-webui
+      local rc=0
+      restic backup --tag evo --exclude-caches \
+        --exclude "$EVO_AI_DIR/open-webui/cache" \
+        "$EVO_CONFIG_DIR" "$EVO_AI_DIR/open-webui" "$EVO_AI_DIR/grafana" \
+        "$EVO_COMFY_DIR/comfy-outputs" "$HOME/.local/state/evo" || rc=$?
+      ((was_up)) && systemctl --user start open-webui
+      ((rc == 0)) || die "restic backup failed ($rc)"
+      restic forget --prune --tag evo --keep-daily "$EVO_BACKUP_KEEP_DAILY" \
+        --keep-weekly "$EVO_BACKUP_KEEP_WEEKLY" --keep-monthly "$EVO_BACKUP_KEEP_MONTHLY" ;;
+    list) restic snapshots ;;
+    restore)
+      local target="${2:-$HOME/evo-restore}"
+      restic restore latest --target "$target"
+      echo "restored into $target; copy files back with the services stopped" ;;
+    *) die "usage: evo backup init|run|list|restore [dir]" ;;
+  esac
+}
+
+cmd_secret() {
+  case "${1:-}" in
+    api-key) echo "$LLAMA_SWAP_KEY" ;;
+    grafana) echo "$GRAFANA_ADMIN_PASSWORD" ;;
+    restic)  echo "$RESTIC_PASSWORD" ;;
+    *) die "usage: evo secret api-key|grafana|restic" ;;
+  esac
+}
+
+cmd_logs() {
+  local s="${1:-llama-swap}"
+  journalctl --user -u "$s" -f -n 100
+}
+
+cmd_update() {
+  info "1/4 repo";            git -C "$REPO_DIR" pull --ff-only || echo "  (local changes; skipped pull)"
+  info "2/4 configs + llama-swap"; "$REPO_DIR/install.sh" user
+  info "3/4 inference images"
+  local img; for img in "$EVO_IMG_VULKAN" "$EVO_IMG_ROCM" "$EVO_IMG_UNIFIED" "$EVO_IMG_KOKORO" "$EVO_IMG_COMFYUI"; do
+    podman image exists "$img" && podman pull -q "$img" >/dev/null && echo "  updated $img"
+  done
+  info "4/4 OS"; echo "  Bazzite updates itself in the background; apply with: ujust update && systemctl reboot"
+}
+
+cmd_images() {
+  [[ "${1:-}" == "pull-all" ]] || die "usage: evo images pull-all"
+  local img; for img in "$EVO_IMG_VULKAN" "$EVO_IMG_ROCM" "$EVO_IMG_UNIFIED" "$EVO_IMG_KOKORO" "$EVO_IMG_COMFYUI"; do
+    echo "pulling $img"; podman pull "$img"
+  done
+}
+
+cmd_comfy() {
+  # Interactive model downloader that ships in kyuz0's ComfyUI image.
+  [[ "${1:-}" == "models" ]] || die "usage: evo comfy models"
+  podman run --rm -it --userns=keep-id --security-opt label=disable \
+    -e HOME=/comfyhome -v "$EVO_COMFY_DIR:/comfyhome" "$EVO_IMG_COMFYUI" \
+    /opt/venv/bin/python /opt/model_manager.py
+}
+
+cmd_doctor() {
+  local fails=0
+  pass() { echo "  ${c_g}✓${c_0} $*"; }
+  fail() { echo "  ${c_r}✗${c_0} $*"; fails=$((fails+1)); }
+  hint() { echo "      ${c_d}→ $*${c_0}"; }
+
+  info "Kernel & memory"
+  local want=$((EVO_GTT_GIB * 262144))
+  if grep -q "ttm.pages_limit=$want" /proc/cmdline; then pass "ttm.pages_limit=$want (${EVO_GTT_GIB} GiB)"; else fail "ttm.pages_limit not set to $want"; hint "./install.sh system && systemctl reboot"; fi
+  local d; d="$(gpu_dev)"
+  if [[ -n "$d" ]]; then
+    local gtt vram; gtt="$(cat "$d/mem_info_gtt_total")"; vram="$(cat "$d/mem_info_vram_total")"
+    (( gtt > (EVO_GTT_GIB - 4) * 1073741824 )) && pass "GPU can use $(gib "$gtt") GiB GTT" || { fail "GTT is only $(gib "$gtt") GiB"; hint "kernel args not applied?"; }
+    (( vram <= 2147483648 )) && pass "BIOS VRAM carve-out $(gib "$vram") GiB (minimum is ideal)" || { fail "BIOS reserves $(gib "$vram") GiB as VRAM"; hint "BIOS: set UMA Frame Buffer Size to the minimum (512 MB)"; }
+  else
+    fail "no amdgpu device with GTT info found"
+  fi
+  echo "  kernel $(uname -r)"
+
+  info "Permissions"
+  local g; for g in video render; do id -nG | tr ' ' '\n' | grep -qx "$g" && pass "in group $g" || { fail "not in group $g"; hint "./install.sh system, then reboot"; }; done
+  [[ -r /dev/kfd && -w /dev/kfd ]] && pass "/dev/kfd accessible (ROCm)" || fail "/dev/kfd not accessible"
+  loginctl show-user "$USER" -p Linger 2>/dev/null | grep -q yes && pass "linger on (services run without login)" || { fail "linger off"; hint "sudo loginctl enable-linger $USER"; }
+
+  info "Services"
+  local s; for s in llama-swap open-webui searxng prometheus grafana node-exporter; do
+    systemctl --user is-active -q "$s" && pass "$s running" || { fail "$s not running"; hint "journalctl --user -u $s -n 50"; }
+  done
+  api_up && pass "llama-swap API answering on :$EVO_LLAMA_SWAP_PORT" || fail "llama-swap API not answering"
+
+  info "Models on disk"
+  grep -v '^#' "$REPO_DIR/config/models.tsv" | awk -F'\t' '$5=="yes"{print $1"\t"$2}' | while IFS=$'\t' read -r n r; do
+    [[ -d "$EVO_MODELS_DIR/$r" ]] && pass "$n" || { echo "  ${c_y}-${c_0} $n not downloaded  ${c_d}(evo models pull $n)${c_0}"; }
+  done
+
+  info "GPU inside a container (Vulkan)"
+  if podman image exists "$EVO_IMG_VULKAN"; then
+    local dev
+    dev="$(podman run --rm --device /dev/dri --userns=keep-id --group-add keep-groups --security-opt label=disable \
+            "$EVO_IMG_VULKAN" llama-cli --list-devices 2>&1 | grep -iE 'vulkan|radeon|gfx' | head -2 || true)"
+    [[ -n "$dev" ]] && pass "container sees: $(echo "$dev" | head -1 | tr -s ' ')" || fail "container cannot see the GPU"
+  else
+    echo "  ${c_y}-${c_0} image not pulled yet"
+  fi
+
+  info "Network"
+  local ip; ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+  echo "  LAN IP: ${ip:-?}  (reserve it in your router's DHCP settings)"
+  if command -v tailscale >/dev/null; then
+    tailscale status >/dev/null 2>&1 && pass "tailscale connected ($(tailscale ip -4 2>/dev/null | head -1))" || echo "  ${c_y}-${c_0} tailscale not logged in  ${c_d}(sudo tailscale up)${c_0}"
+  fi
+  [[ -f /etc/NetworkManager/conf.d/99-evo-wifi-powersave.conf ]] && pass "Wi-Fi power saving disabled" || fail "Wi-Fi power saving not configured"
+
+  info "Power"
+  echo "  $(current_power)"
+  systemctl is-enabled sleep.target 2>/dev/null | grep -q masked && pass "suspend disabled" || { fail "system can still suspend"; hint "./install.sh system"; }
+
+  info "Disk"
+  df -h "$EVO_MODELS_DIR" | tail -1 | awk '{print "  models disk: "$4" free of "$2}'
+
+  echo
+  ((fails == 0)) && info "${c_g}All good.${c_0}" || info "${c_y}$fails problem(s) found.${c_0}"
+}
+
+case "${1:-}" in
+  status|"") cmd_status ;;
+  mode)      shift; cmd_mode "$@" ;;
+  profile)   shift; cmd_profile "$@" ;;
+  run)       shift; cmd_run "$@" ;;
+  models)    shift; cmd_models "$@" ;;
+  bench)     shift; cmd_bench "$@" ;;
+  backup)    shift; cmd_backup "$@" ;;
+  secret)    shift; cmd_secret "$@" ;;
+  logs)      shift; cmd_logs "$@" ;;
+  update)    cmd_update ;;
+  images)    shift; cmd_images "$@" ;;
+  comfy)     shift; cmd_comfy "$@" ;;
+  doctor)    cmd_doctor ;;
+  _restore-state) cmd_restore_state ;;
+  -h|--help|help) sed -n '2,15p' "$SELF" | sed 's/^# \{0,1\}//' ;;
+  *) die "unknown command '$1' (evo help)" ;;
+esac

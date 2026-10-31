@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=EVO: Quiet mode
+Comment=Low power; AI models load only when someone asks
+Icon=weather-clear-night
+Exec=@BIN_DIR@/evo-notify quiet
+Terminal=false
+Categories=System;Utility;

@@ -1,0 +1,22 @@
+# SearXNG: private meta-search used by Open WebUI's "web search" toggle.
+# Only reachable from this machine (127.0.0.1); Open WebUI talks to it.
+use_default_settings: true
+
+general:
+  instance_name: "evo-x3 search"
+
+server:
+  secret_key: "@SEARXNG_SECRET@"
+  limiter: false          # single trusted client (Open WebUI), no rate limiting
+  image_proxy: false
+  public_instance: false
+
+search:
+  safe_search: 0
+  autocomplete: ""
+  formats:
+    - html
+    - json                # required by Open WebUI
+
+ui:
+  default_locale: ""

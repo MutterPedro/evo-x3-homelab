@@ -1,0 +1,17 @@
+# SearXNG: private web search for the LLMs. Only listens on 127.0.0.1.
+[Unit]
+Description=SearXNG metasearch
+After=network-online.target
+
+[Container]
+Image=docker.io/searxng/searxng:latest
+ContainerName=searxng
+PublishPort=127.0.0.1:@EVO_SEARXNG_PORT@:8080
+Volume=@EVO_AI_DIR@/searxng/settings.yml:/etc/searxng/settings.yml:Z
+AutoUpdate=registry
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target

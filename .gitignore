@@ -1,0 +1,5 @@
+# never commit generated configs or secrets
+secrets.env
+runtime.env
+*.local
+.DS_Store

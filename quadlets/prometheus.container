@@ -1,0 +1,20 @@
+# Prometheus: stores metrics for Grafana (keeps 30 days, 127.0.0.1 only).
+[Unit]
+Description=Prometheus
+After=node-exporter.service llama-swap.service
+
+[Container]
+Image=docker.io/prom/prometheus:latest
+ContainerName=prometheus
+Network=host
+UserNS=keep-id:uid=65534,gid=65534
+Volume=@EVO_CONFIG_DIR@/prometheus.yml:/etc/prometheus/prometheus.yml:ro,Z
+Volume=@EVO_AI_DIR@/prometheus:/prometheus:Z
+Exec=--config.file=/etc/prometheus/prometheus.yml --storage.tsdb.path=/prometheus --storage.tsdb.retention.time=30d --web.listen-address=127.0.0.1:@EVO_PROMETHEUS_PORT@
+AutoUpdate=registry
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target
