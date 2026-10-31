@@ -14,7 +14,7 @@ How it's wired: node-exporter (with the `drm` and `hwmon` collectors) and llama-
 
 What to watch:
 - **GTT used close to the limit** with swapping starting means a model set doesn't fit. Lower `capacities.gpu` sums, or reduce context.
-- **Hottest sensor > 90 °C** under sustained load means the fan curve is too lazy ([03-bios](03-bios.md)).
+- **Hottest sensor > 90 °C** under sustained load means it is running hot: try `evo mode quiet` for long jobs (the BIOS has no fan curve, see [03-bios](03-bios.md)).
 - **Package power stuck at ~85 W in game mode** means the BIOS is not in Performance mode, or there's no platform profile ([03-bios](03-bios.md#how-power-control-works-on-linux-and-why-the-bios-mode-matters)).
 
 ## Backups: restic → Google Drive (encrypted)

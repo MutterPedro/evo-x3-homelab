@@ -63,7 +63,7 @@ flowchart LR
 | # | Step | Guide |
 |---|---|---|
 | 0 | Note the machine's details, reserve an IP on the router, create the Bazzite USB | [02-before-you-wipe](docs/02-before-you-wipe.md) |
-| 1 | BIOS: set UMA to minimum, power restore on, performance mode, fan curve | [03-bios](docs/03-bios.md) |
+| 1 | BIOS: UMA_SPECIFIED + minimum frame buffer, Auto Power On, Performance mode | [03-bios](docs/03-bios.md) |
 | 2 | Install Bazzite (KDE, AMD) on the 4 TB NVMe | [04-install-bazzite](docs/04-install-bazzite.md) |
 | 3 | Clone this repo and run the installer | below and [05-bootstrap](docs/05-bootstrap.md) |
 | 4 | Download models, open the chat, connect your tools | [06-llm-server](docs/06-llm-server.md) |

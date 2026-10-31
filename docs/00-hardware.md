@@ -44,7 +44,7 @@ AMD's own ROCm guidance is to **keep the carve-out tiny (512 MB) and raise the G
 
 ## Known quirks (from reviews and forums)
 
-- The default fan curve doesn't reach full speed until **95 °C** (Level1Techs). Set a curve in the BIOS ([03-bios](03-bios.md)).
+- The default fan behaviour doesn't reach full speed until **95 °C** (Level1Techs), and this BIOS has **no manual fan curve** ([03-bios](03-bios.md)). Fans follow *Power Mode Select*.
 - The BIOS has **no AMD CBS menu**, so TDP can't be raised beyond the vendor's Performance mode.
 - **OCuLink is not hot-plug.** Power off before connecting a future eGPU dock.
 - Only **one 2.5 GbE port**, and Wi-Fi 7 is capped at 160 MHz channels.

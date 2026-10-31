@@ -31,7 +31,7 @@ Start with **`evo doctor`**. It checks kernel args, GTT size, BIOS carve-out, gr
 | Web search returns nothing | `systemctl --user status searxng`. Some engines rate-limit; adjust engines in `~/ai/searxng/settings.yml` and restart |
 | Wi-Fi drops / box unreachable | `nmcli`, `journalctl -b -u NetworkManager`. Try `sudo modprobe -r mt7925e && sudo modprobe mt7925e`. Consider a cable; Tailscale still reaches it if the LAN IP changed |
 | Services didn't start after reboot | `loginctl show-user $USER -p Linger` must be `yes`; `systemctl --user --failed` |
-| Fans loud at idle | BIOS fan curve ([03-bios](03-bios.md)), `evo mode quiet` overnight |
+| Fans loud | No BIOS fan curve exists; use `evo mode quiet` overnight or for long jobs |
 | A game stutters | `evo mode game` (or `evo run -- %command%`), check `evo status` shows no models loaded |
 
 Logs: `evo logs` (llama-swap) · `evo logs open-webui` · `journalctl --user -u <service>` · `journalctl -b -p err` (system).

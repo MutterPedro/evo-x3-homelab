@@ -2,17 +2,20 @@
 
 Enter the BIOS by pressing **`Del`** (or `Esc`) repeatedly right after power-on. `F7` usually opens the one-time boot menu.
 
-> The EVO-X3 BIOS is an AMI Aptio build with GMKtec's own menus, and menu names move between versions. If a setting isn't where this says, look under *Advanced*, *Chipset* or *Power*. **Take phone photos of every menu the first time**, so the repo can be updated with exact paths.
 
-## Must change
+## Must change (exact paths, verified on BIOS EVO-X3_V1.01)
 
-| Setting | Typical location | Set to | Why |
-|---|---|---|---|
-| **UMA Frame Buffer Size** (also "iGPU Memory", "VRAM Size", "GFX Configuration → UMA") | Advanced → *GFX Configuration* / *Chipset* | **the minimum (512M, or 1G if 512M isn't offered)**. If there's a mode selector, pick `UMA_SPECIFIED` | The factory setting reserves **64 GB** that Linux can never get back. With the minimum, the GPU borrows RAM dynamically (GTT), up to 120 GB. `evo doctor` will flag it if this is wrong |
-| **Restore on AC Power Loss** ("AC Back", "Power On after Power Failure") | Advanced → *Power* / *Chipset → South Bridge* | **Power On** (or *Last State*) | After a power cut the server comes back by itself |
-| **Power mode / Performance mode** | Advanced → *Power Mode* / main page | **Performance** (140 W) | Idle draw stays ~11 W regardless. This only lifts the ceiling for long LLM runs and games. If the BIOS mode is the only real TDP control (see below), this is how you get "max when needed" |
-| **Fan curve** ("Smart Fan") | Advanced → *Hardware Monitor* / *Smart Fan* | Custom curve, see below | The stock curve waits until 95 °C to reach full speed |
-| **Boot order** | Boot | USB first for the install, then **Bazzite** (the installer creates the entry) | |
+| Setting | Path | Factory | Set to | Why |
+|---|---|---|---|---|
+| **iGPU Configuration** | Advanced → GFX Configuration | `Auto` (= 64 GB carve-out) | **`UMA_SPECIFIED`** | Unlocks the size option below |
+| **UMA Frame buffer Size** | Advanced → GFX Configuration (appears after the above) | – | **smallest offered (512M if listed, else 1G)** | The GPU then borrows RAM dynamically (GTT, up to 120 GB). `evo doctor` flags it if wrong |
+| **Auto Power On** | Advanced (top of the page) | `Power Off` | **`Power On`** | The server comes back by itself after a power cut |
+| **Power Mode Select** | Main (bottom), also shown in Advanced → Hardware Monitor | `Automatic Mode` | **`Performance`** | 140 W ceiling for long LLM runs and games; idle draw stays low |
+| Boot order | Boot | | USB first for the install, then the Bazzite entry | |
+
+Leave *Wake on lan*, *USB Boot* and *Trusted Computing* as they are.
+
+**No fan curve:** *Advanced → Hardware Monitor* only shows temperatures, two fan speeds (0 RPM at idle, the fans stop below ~45 °C) and *Power Mode Select*. There are no manual fan controls in this BIOS, so fan behaviour follows the power mode. If load noise or temperatures are a problem, use `evo mode quiet`.
 
 ## Recommended
 
@@ -24,17 +27,6 @@ Enter the BIOS by pressing **`Del`** (or `Esc`) repeatedly right after power-on.
 | SVM (AMD-V virtualisation) | Enabled | Needed for Waydroid / VMs, harmless otherwise |
 | IOMMU | Leave on (Auto) in BIOS | Linux handles it via `amd_iommu=off` (see [00-hardware](00-hardware.md)) |
 | Wake on LAN | Irrelevant on Wi-Fi | Only works on the wired port |
-
-## Suggested fan curve (quiet idle, cool under load)
-
-| APU temp | Fan duty |
-|---|---|
-| ≤ 50 °C | 25–30 % (near-silent idle) |
-| 65 °C | 45 % |
-| 75 °C | 65 % |
-| 85 °C | 100 % |
-
-Under sustained LLM load the package sits around 70–80 °C at 115–140 W. This curve keeps it below the throttle point without screaming at idle. If you prefer silence over speed during inference, use `evo mode quiet` (lower OS power profile) instead of a lazier curve.
 
 ## How power control works on Linux (and why the BIOS mode matters)
 
