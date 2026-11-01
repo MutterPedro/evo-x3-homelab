@@ -54,13 +54,13 @@ macros:
 models:
   # ===========================================================================
   # SMART: Qwen3.8 Flash-Next 125B-A6B (vision + reasoning + coding)
-  # ~94 GB at UD-IQ4_XS. Top open model that fits in 128 GB (Oct 2026).
+  # ~94 GB at UD-IQ4_XS (measured: ~70 GiB GTT at 128k context). Top open model that fits in 128 GB (Oct 2026).
   # Multi-token prediction (MTP) speculative decoding gives ~1.3-1.7x speed.
   # ===========================================================================
   "qwen3.8-flash-next":
     name: "Qwen3.8 Flash-Next 125B (smart)"
-    description: "Best quality. Vision, tools, long context. Uses most of the GPU memory."
-    capacities: { gpu: 102 }
+    description: "Best quality. Vision, tools, long context. Uses ~70 GiB of GPU memory."
+    capacities: { gpu: 72 }
     evict_cost: 50              # slow to reload (~94 GB), keep it if possible
     concurrencyLimit: 4
     cmd: |
@@ -87,7 +87,7 @@ models:
   "gpt-oss-120b":
     name: "gpt-oss 120B (fast)"
     description: "OpenAI open-weight reasoning model. Strong tool use, ~35-55 tok/s."
-    capacities: { gpu: 70 }
+    capacities: { gpu: 68 }
     evict_cost: 30
     cmd: |
       ${gpu-run} ${vulkan}
@@ -111,7 +111,7 @@ models:
   "qwen3.6-35b-a3b":
     name: "Qwen3.6 35B-A3B (coder)"
     description: "Fast MoE for coding agents and autocomplete-style use."
-    capacities: { gpu: 27 }
+    capacities: { gpu: 26 }
     evict_cost: 5
     cmd: |
       ${gpu-run} ${vulkan}
@@ -129,7 +129,7 @@ models:
   "gemma-4-26b-a4b":
     name: "Gemma 4 26B-A4B (family & vision)"
     description: "Everyday chat, Portuguese, image understanding. ~50-100 tok/s."
-    capacities: { gpu: 19 }
+    capacities: { gpu: 21 }
     evict_cost: 5
     cmd: |
       ${gpu-run} ${vulkan}
@@ -228,11 +228,11 @@ profiles:
       vision: "qwen3.8-flash-next"
       fast: "gemma-4-26b-a4b"
   fast:
-    description: "Speed: gpt-oss-120b + Qwen3.6 coder + Gemma vision, all loaded together"
+    description: "Speed: gpt-oss-120b + Qwen3.6 (code and vision), both loaded together"
     pins:
       chat: "gpt-oss-120b"
       code: "qwen3.6-35b-a3b"
-      vision: "gemma-4-26b-a4b"
+      vision: "qwen3.6-35b-a3b"
       fast: "qwen3.6-35b-a3b"
   multi:
     description: "Many small models at once, leaves ~60 GB free for ComfyUI image/video"

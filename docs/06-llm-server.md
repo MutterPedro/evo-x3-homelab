@@ -37,9 +37,26 @@ Point every client at **`chat`, `code`, `vision` or `fast`**, never at a concret
 
 | Profile | chat | code | vision | fast | Typical resident set |
 |---|---|---|---|---|---|
-| **smart** (default) | Flash-Next | Flash-Next | Flash-Next | Gemma 4 | Flash-Next + embeddings + whisper ≈ 104 GB |
-| **fast** | gpt-oss-120b | Qwen3.6 | Gemma 4 | Qwen3.6 | all three together ≈ 113 GB |
-| **multi** | Gemma 4 | Qwen3.6 | Gemma 4 | Gemma 4 | ≈ 47 GB, leaving ~60 GB for ComfyUI |
+| **smart** (default) | Flash-Next | Flash-Next | Flash-Next | Gemma 4 | Flash-Next + Gemma 4 + embeddings + whisper ≈ 99 GiB |
+| **fast** | gpt-oss-120b | Qwen3.6 | Qwen3.6 | Qwen3.6 | gpt-oss + Qwen3.6 + helpers ≈ 100 GiB |
+| **multi** | Gemma 4 | Qwen3.6 | Gemma 4 | Gemma 4 | ≈ 53 GiB, leaving ~60 GB for ComfyUI |
+
+### Measured performance
+
+Measured on the EVO-X3 (Bazzite 44, kernel 7.2, BIOS V1.01 Performance mode, GTT 120 GiB) with a ~10k-token Portuguese prompt, one request at a time, models loaded from cold. "GTT" is `mem_info_gtt_used` after the request; `capacities.gpu` is that plus ~2 GiB.
+
+| Model | Backend | Prompt (tok/s) | Generation (tok/s) | GTT (GiB) |
+|---|---|---|---|---|
+| Qwen3.8 Flash-Next IQ4_XS + MTP, 128k ctx | Vulkan RADV | 441 | 34-38 | 70 |
+| | ROCm 10.0 | 499 | 34 | 69 |
+| gpt-oss-120b | Vulkan RADV | 942 | 36 | 66 |
+| | ROCm 10.0 | 935 | 33 | 65 |
+| Qwen3.6-35B-A3B | Vulkan RADV | 1409 | 58 | 24 |
+| | ROCm 10.0 | 1534 | 51 | 24 |
+| Gemma 4 26B-A4B | Vulkan RADV | 1523 | 62 | 19 |
+| | ROCm 10.0 | 1534 | 56 | 19 |
+
+Vulkan generates 5-15% faster on every model but Flash-Next (a tie); ROCm processes prompts up to 13% faster on the two models where it differs. Generation speed matters more for chat, so every model defaults to Vulkan. To try ROCm for one model, change `${vulkan}` to `${rocm}` in its `cmd`. Flash-Next's MTP draft accepts about 58% of drafted tokens.
 
 The concrete IDs (`gpt-oss-120b:high`, etc.) stay available for anyone who wants a specific model. The default profile after a reboot is set by `EVO_DEFAULT_PROFILE`; `evo profile X` also persists across restarts.
 
