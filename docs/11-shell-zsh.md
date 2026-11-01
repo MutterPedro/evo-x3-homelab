@@ -1,6 +1,6 @@
 # 11 · Shell: zsh + Oh My Zsh + the `evo` prompt
 
-Bazzite ships bash. This sets up zsh with Oh My Zsh, four plugins and a prompt
+Bazzite ships bash. This sets up zsh with Oh My Zsh, three plugins and a prompt
 that shows the machine's mode (game / server / quiet), the `evo` profile and
 unified-memory (GTT) use. Files: [`config/zsh/zshrc`](../config/zsh/zshrc) and
 [`config/zsh/evo.zsh-theme`](../config/zsh/evo.zsh-theme).
@@ -33,7 +33,6 @@ git clone --depth 1 https://github.com/ohmyzsh/ohmyzsh.git ~/.oh-my-zsh
 C=~/.oh-my-zsh/custom/plugins
 git clone https://github.com/zsh-users/zsh-autosuggestions.git            $C/zsh-autosuggestions
 git clone https://github.com/zdharma-continuum/fast-syntax-highlighting.git $C/fast-syntax-highlighting
-git clone --depth 1 https://github.com/marlonrichert/zsh-autocomplete.git  $C/zsh-autocomplete
 # optional, not enabled (redundant with fast-syntax-highlighting):
 # git clone https://github.com/zsh-users/zsh-syntax-highlighting.git $C/zsh-syntax-highlighting
 ```
@@ -56,12 +55,13 @@ What the `zshrc` changes from the Oh My Zsh template:
 | Change | Why |
 |---|---|
 | `PATH` includes `~/.local/bin`, `~/bin`, Homebrew; `typeset -U path PATH` | Only `~/.bashrc` added them, so zsh could not find `claude` or `evo`. |
-| `zsh-autocomplete` is **sourced before** `source $ZSH/oh-my-zsh.sh`, not listed in `plugins=()` | As an OMZ plugin it loads after `compinit` and Tab prints `command not found: _autocomplete__unambiguous`. |
 | `ZSH_THEME="evo"` | The custom prompt below. |
 | Aliases `game`, `server`, `quiet`, `gpu` | `evo mode game\|server\|quiet`, and `nvtop`. |
 
-If `zsh-autocomplete` misbehaves with `fast-syntax-highlighting` (reported in
-the gist's comments), drop `zsh-autocomplete` first.
+`zsh-autocomplete` (from the gist) is deliberately **not** used: it does not work
+as an Oh My Zsh plugin (`command not found: _autocomplete__unambiguous` on Tab)
+and, sourced early, it clashes with `fast-syntax-highlighting`, which prints
+`unhandled ZLE widget 'menu-search'` on every new shell.
 
 ## 4. The `evo` prompt
 

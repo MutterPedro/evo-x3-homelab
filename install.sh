@@ -366,12 +366,11 @@ install_zsh() {
   mkdir -p "$custom/plugins" "$custom/themes"
   for repo in \
     zsh-users/zsh-autosuggestions \
-    zdharma-continuum/fast-syntax-highlighting \
-    marlonrichert/zsh-autocomplete; do
+    zdharma-continuum/fast-syntax-highlighting; do
     plug="$custom/plugins/${repo#*/}"
     [[ -d "$plug" ]] || git clone --depth 1 "https://github.com/$repo.git" "$plug"
   done
-  ok "oh-my-zsh + zsh-autosuggestions, fast-syntax-highlighting, zsh-autocomplete"
+  ok "oh-my-zsh + zsh-autosuggestions, fast-syntax-highlighting"
 
   step "zsh: ~/.zshrc and the evo theme"
   cp "$REPO_DIR/config/zsh/evo.zsh-theme" "$custom/themes/evo.zsh-theme"

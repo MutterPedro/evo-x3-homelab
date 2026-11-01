@@ -31,7 +31,8 @@ _evo_precmd() {
 
   case $mode in
     game)   _evo_badge="%F{magenta}%B 🎮 GAME %b%f" ;;
-    server) _evo_badge="%F{cyan}%B 🧠 SERVER %b%f${prof:+%F{8}·%f%F{blue}$prof%f}" ;;
+    server) _evo_badge="%F{cyan}%B 🧠 SERVER %b%f"
+            [[ -n $prof ]] && _evo_badge+="%F{8}·%f%F{blue}$prof%f" ;;
     quiet)  _evo_badge="%F{yellow}%B 🌙 QUIET %b%f" ;;
     *)      _evo_badge="%F{8} ◌ no mode %f" ;;
   esac
@@ -46,7 +47,8 @@ _evo_precmd() {
       local u=$(( used / 1073741824 )) t=$(( total / 1073741824 ))
       (( t > 0 && u * 100 / t >= 60 )) && color=yellow
       (( t > 0 && u * 100 / t >= 85 )) && color=red
-      _evo_gpu="%F{8}GPU%f %F{$color}${u}/${t}G%f${busy:+ %F{8}${busy}%%%f}"
+      _evo_gpu="%F{8}GPU%f %F{$color}${u}/${t}G%f"
+      [[ -n $busy ]] && _evo_gpu+=" %F{8}${busy}%%%f"
     fi
   fi
 }
