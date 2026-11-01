@@ -210,8 +210,12 @@ cmd_models() {
         line="$(model_line "$n")"; [[ -n "$line" ]] || die "unknown model '$n' (see: evo models list)"
         repo="$(cut -f2 <<<"$line")"; inc="$(cut -f3 <<<"$line")"
         info "downloading $n  ($repo: $inc)"
+        # One --include per pattern: `--include a b` would treat b as a filename
+        # and silently skip a.
+        local -a incs=(); local pat
+        for pat in $inc; do incs+=(--include "$pat"); done
         # shellcheck disable=SC2086
-        HF_XET_HIGH_PERFORMANCE=1 $hf download "$repo" --include $inc --local-dir "$EVO_MODELS_DIR/$repo"
+        HF_XET_HIGH_PERFORMANCE=1 $hf download "$repo" "${incs[@]}" --local-dir "$EVO_MODELS_DIR/$repo"
       done ;;
     du) du -sh "$EVO_MODELS_DIR"/*/* 2>/dev/null | sort -h ;;
     *) die "usage: evo models list|pull|du" ;;
