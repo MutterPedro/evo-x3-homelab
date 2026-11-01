@@ -169,7 +169,7 @@ models:
       ${gpu-run} --entrypoint whisper-server @EVO_IMG_UNIFIED@
       --host 0.0.0.0 --port ${PORT}
       -m ${m}/ggerganov/whisper.cpp/ggml-large-v3-turbo-q8_0.bin
-      --inference-path /v1/audio/transcriptions --convert --tmp-dir /tmp
+      --inference-path /v1/audio/transcriptions --convert --tmp-dir /tmp -l auto
     cmdStop: ${stop}
 
   # ===========================================================================
