@@ -20,13 +20,16 @@ Everything now works from anywhere at `http://evo-x3:3000`, `http://evo-x3:8080/
 Browsers only allow microphone access (voice chat) and "install as app" on HTTPS pages. Tailscale can provide a certificate:
 
 ```bash
-# one-time: enable HTTPS certificates in the Tailscale admin console (DNS page)
-sudo tailscale serve --bg --https=443 http://127.0.0.1:3000      # Open WebUI
-sudo tailscale serve --bg --https=8443 http://127.0.0.1:8080     # API (optional)
+# one-time, in the admin console: enable Serve (the first `tailscale serve`
+# prints a login.tailscale.com/f/serve?node=... link) and HTTPS Certificates (DNS page)
+# one-time, so serve needs no sudo afterwards:
+sudo tailscale set --operator=$USER
+tailscale serve --bg --https=443 http://127.0.0.1:3000      # Open WebUI
+tailscale serve --bg --https=8443 http://127.0.0.1:8080     # API (optional)
 tailscale serve status
 ```
 
-The chat is then at **`https://evo-x3.<your-tailnet>.ts.net`**, valid only inside your tailnet. Add it to the phone's home screen for an app-like experience.
+The chat is then at **`https://evo-x3.<your-tailnet>.ts.net`**, valid only inside your tailnet (verified on this machine: HTTP 200, valid certificate; the first request takes a few seconds while the certificate is issued). The serve config persists across reboots. Add it to the phone's home screen for an app-like experience.
 
 ## Giving family and friends access
 
