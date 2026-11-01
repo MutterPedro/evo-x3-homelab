@@ -60,7 +60,7 @@ set_kargs() {
       [[ "$cur_val" == "$kv" ]] && continue
       args+=("--delete=$cur_val")
     done < <(tr ' ' '\n' <<<"$current" | grep -E "^${key//./\\.}(=|$)" || true)
-    if ! tr ' ' '\n' <<<"$current" | grep -qxF "$kv"; then
+    if [[ " $current " != *" $kv "* ]]; then
       args+=("--append=$kv")
     fi
   done
@@ -88,7 +88,7 @@ ensure_group() {
     # first so usermod can modify it (same approach as `ujust add-user-to-input-group`).
     grep "^${g}:" /usr/lib/group | sudo tee -a /etc/group >/dev/null
   fi
-  if id -nG "$USER" | tr ' ' '\n' | grep -qx "$g"; then
+  if [[ " $(id -nG "$USER") " == *" $g "* ]]; then
     ok "$USER already in group $g"
   else
     sudo usermod -aG "$g" "$USER"; ok "added $USER to group $g (takes effect after reboot)"
@@ -149,7 +149,7 @@ install_system() {
   sudo loginctl enable-linger "$USER"; ok "linger enabled"
 
   step "Hardware watchdog on (auto-reboot if the kernel ever hangs)"
-  if rpm-ostree kargs | grep -qE '(^| )nowatchdog( |$)'; then
+  if [[ " $(rpm-ostree kargs) " == *" nowatchdog "* ]]; then
     sudo rpm-ostree kargs --delete-if-present=nowatchdog --delete-if-present=modprobe.blacklist=sp5100_tco
     NEED_REBOOT=1
   fi
@@ -237,9 +237,17 @@ install_brew_tools() {
 
 install_llama_swap() {
   local ver cur=""
-  ver="$(curl -fsSL https://api.github.com/repos/mostlygeek/llama-swap/releases/latest | grep -m1 '"tag_name"' | sed -E 's/.*"v?([^"]+)".*/\1/')" \
-    || die "could not query llama-swap releases"
-  [[ -x "$BIN_DIR/llama-swap" ]] && cur="$("$BIN_DIR/llama-swap" -version 2>/dev/null | grep -oE '[0-9]+' | head -1 || true)"
+  # Download fully first, then parse in bash: piping curl into `grep -m1` makes
+  # curl fail with "(23) Failure writing output" under `set -o pipefail`.
+  local json
+  json="$(curl -fsSL https://api.github.com/repos/mostlygeek/llama-swap/releases/latest)" \
+    || die "could not query llama-swap releases (GitHub API rate limit? try again in a few minutes)"
+  [[ "$json" =~ \"tag_name\":[[:space:]]*\"v?([^\"]+)\" ]] || die "could not parse llama-swap release tag"
+  ver="${BASH_REMATCH[1]}"
+  if [[ -x "$BIN_DIR/llama-swap" ]]; then
+    local vout; vout="$("$BIN_DIR/llama-swap" -version 2>/dev/null || true)"
+    [[ "$vout" =~ ([0-9]+) ]] && cur="${BASH_REMATCH[1]}"
+  fi
   if [[ "$cur" == "$ver" ]]; then
     ok "llama-swap v$ver already installed"
     return

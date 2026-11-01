@@ -52,7 +52,7 @@ save_state() { # save_state KEY VALUE
   grep -v "^$1=" "$STATE_FILE" >"$STATE_FILE.tmp" || true
   echo "$1=$2" >>"$STATE_FILE.tmp"; mv "$STATE_FILE.tmp" "$STATE_FILE"
 }
-get_state() { [[ -f "$STATE_FILE" ]] && grep -m1 "^$1=" "$STATE_FILE" | cut -d= -f2- || true; }
+get_state() { [[ -f "$STATE_FILE" ]] || return 0; local l; while IFS= read -r l; do [[ "$l" == "$1="* ]] && { echo "${l#*=}"; return 0; }; done <"$STATE_FILE"; }
 
 gpu_dev() { local d; for d in /sys/class/drm/card*/device; do [[ -f "$d/mem_info_gtt_total" ]] && { echo "$d"; return; }; done; }
 gib() { awk -v b="${1:-0}" 'BEGIN{printf "%.1f", b/1073741824}'; }
@@ -323,9 +323,9 @@ cmd_doctor() {
   echo "  kernel $(uname -r)"
 
   info "Permissions"
-  local g; for g in video render; do id -nG | tr ' ' '\n' | grep -qx "$g" && pass "in group $g" || { fail "not in group $g"; hint "./install.sh system, then reboot"; }; done
+  local g; for g in video render; do [[ " $(id -nG) " == *" $g "* ]] && pass "in group $g" || { fail "not in group $g"; hint "./install.sh system, then reboot"; }; done
   [[ -r /dev/kfd && -w /dev/kfd ]] && pass "/dev/kfd accessible (ROCm)" || fail "/dev/kfd not accessible"
-  loginctl show-user "$USER" -p Linger 2>/dev/null | grep -q yes && pass "linger on (services run without login)" || { fail "linger off"; hint "sudo loginctl enable-linger $USER"; }
+  [[ "$(loginctl show-user "$USER" -p Linger 2>/dev/null)" == *yes* ]] && pass "linger on (services run without login)" || { fail "linger off"; hint "sudo loginctl enable-linger $USER"; }
 
   info "Services"
   local s; for s in llama-swap open-webui searxng prometheus grafana node-exporter; do
@@ -342,8 +342,8 @@ cmd_doctor() {
   if podman image exists "$EVO_IMG_VULKAN"; then
     local dev
     dev="$(podman run --rm --device /dev/dri --userns=keep-id --group-add keep-groups --security-opt label=disable \
-            "$EVO_IMG_VULKAN" llama-cli --list-devices 2>&1 | grep -iE 'vulkan|radeon|gfx' | head -2 || true)"
-    [[ -n "$dev" ]] && pass "container sees: $(echo "$dev" | head -1 | tr -s ' ')" || fail "container cannot see the GPU"
+            "$EVO_IMG_VULKAN" llama-cli --list-devices 2>&1 | grep -iE 'vulkan|radeon|gfx' || true)"
+    [[ -n "$dev" ]] && pass "container sees: ${dev%%$'\n'*}" || fail "container cannot see the GPU"
   else
     echo "  ${c_y}-${c_0} image not pulled yet"
   fi
@@ -352,13 +352,13 @@ cmd_doctor() {
   local ip; ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
   echo "  LAN IP: ${ip:-?}  (reserve it in your router's DHCP settings)"
   if command -v tailscale >/dev/null; then
-    tailscale status >/dev/null 2>&1 && pass "tailscale connected ($(tailscale ip -4 2>/dev/null | head -1))" || echo "  ${c_y}-${c_0} tailscale not logged in  ${c_d}(sudo tailscale up)${c_0}"
+    tailscale status >/dev/null 2>&1 && pass "tailscale connected ($(tailscale ip -4 2>/dev/null))" || echo "  ${c_y}-${c_0} tailscale not logged in  ${c_d}(sudo tailscale up)${c_0}"
   fi
   [[ -f /etc/NetworkManager/conf.d/99-evo-wifi-powersave.conf ]] && pass "Wi-Fi power saving disabled" || fail "Wi-Fi power saving not configured"
 
   info "Power"
   echo "  $(current_power)"
-  systemctl is-enabled sleep.target 2>/dev/null | grep -q masked && pass "suspend disabled" || { fail "system can still suspend"; hint "./install.sh system"; }
+  [[ "$(systemctl is-enabled sleep.target 2>/dev/null)" == masked ]] && pass "suspend disabled" || { fail "system can still suspend"; hint "./install.sh system"; }
 
   info "Disk"
   df -h "$EVO_MODELS_DIR" | tail -1 | awk '{print "  models disk: "$4" free of "$2}'
