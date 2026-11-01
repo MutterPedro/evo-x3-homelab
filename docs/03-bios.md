@@ -36,11 +36,12 @@ Linux has two levers:
 1. **TuneD profiles** (`balanced-bazzite`, `throughput-performance-bazzite`, `powersave-bazzite`). They set CPU frequency policy and energy hints. `evo mode` switches them.
 2. **ACPI platform profile** (`/sys/firmware/acpi/platform_profile`). On machines where the firmware exposes it (via AMD PMF), changing the profile **changes the actual TDP**. TuneD and `evo` drive it automatically when present.
 
-After installing, run `cat /sys/firmware/acpi/platform_profile_choices`.
+**Verified on the EVO-X3 (BIOS V1.01, Bazzite 44): `/sys/firmware/acpi/platform_profile` does not exist.** The BIOS *Power Mode Select* is therefore the only real TDP control, so keep it on **Performance**. `evo mode` still switches TuneD profiles (CPU frequency policy and energy hints), which is what makes idle quiet and frugal.
+
+To re-check on a new BIOS: `cat /sys/firmware/acpi/platform_profile_choices`.
 
 - If it lists `low-power balanced performance`, `evo mode quiet/server/game` really changes the power limit (roughly 54/85/140 W).
 - If the file doesn't exist, **the BIOS power mode is the only TDP control**, and `evo mode` only changes CPU policy. Keep the BIOS on *Performance* so games and big models get full power; idle draw is unaffected.
 
-Please report which case you have. The repo can then document it properly or add a `ryzenadj` fallback.
 
 ➡ Next: [04-install-bazzite](04-install-bazzite.md)

@@ -64,7 +64,7 @@ flowchart LR
 |---|---|---|
 | 0 | Note the machine's details, reserve an IP on the router, create the Bazzite USB | [02-before-you-wipe](docs/02-before-you-wipe.md) |
 | 1 | BIOS: UMA_SPECIFIED + minimum frame buffer, Auto Power On, Performance mode | [03-bios](docs/03-bios.md) |
-| 2 | Install Bazzite (KDE, AMD) on the 4 TB NVMe | [04-install-bazzite](docs/04-install-bazzite.md) |
+| 2 | Install Bazzite (KDE, AMD) on the 4 TB NVMe (no good USB stick? see [04b](docs/04b-install-without-usb.md)) | [04-install-bazzite](docs/04-install-bazzite.md) |
 | 3 | Clone this repo and run the installer | below and [05-bootstrap](docs/05-bootstrap.md) |
 | 4 | Download models, open the chat, connect your tools | [06-llm-server](docs/06-llm-server.md) |
 | 5 | Steam, game-mode switching, Sunshine/Moonlight | [07-gaming](docs/07-gaming.md) |
@@ -128,6 +128,7 @@ system/                       files installed under /etc (Wi-Fi, watchdog)
 desktop/                      app-menu launchers for the three modes
 docs/                         the full guide
 tests/render-test.sh          CI: renders all templates and boots llama-swap with them
+tools/windows/                PowerShell helpers to install Bazzite from an internal partition (no USB)
 ```
 
 Secrets (API key, Open WebUI secret, Grafana and restic passwords) are generated on the machine into `~/.config/evo/secrets.env` and are **never** committed.
