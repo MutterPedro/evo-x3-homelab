@@ -71,6 +71,7 @@ flowchart LR
 | 6 | Tailscale for access from outside | [08-remote-access](docs/08-remote-access.md) |
 | 7 | Dashboards and backups | [09-monitoring-and-backups](docs/09-monitoring-and-backups.md) |
 | – | Updates, rollback, troubleshooting, rebuild | [10-operations](docs/10-operations.md) |
+| – | zsh, Oh My Zsh and the mode-aware prompt | [11-shell-zsh](docs/11-shell-zsh.md) |
 
 ```bash
 # on the freshly installed Bazzite, in a terminal (Konsole)
@@ -126,6 +127,7 @@ quadlets/                     rootless podman services (Open WebUI, SearXNG, Gra
 systemd/user/                 llama-swap service, nightly backup timer
 system/                       files installed under /etc (Wi-Fi, watchdog)
 desktop/                      app-menu launchers for the three modes
+config/zsh/                   zshrc + `evo` prompt theme (mode, profile and GPU memory in the prompt)
 docs/                         the full guide
 tests/render-test.sh          CI: renders all templates and boots llama-swap with them
 tools/windows/                PowerShell helpers to install Bazzite from an internal partition (no USB)

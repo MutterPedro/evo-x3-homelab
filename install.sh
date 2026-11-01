@@ -5,6 +5,7 @@
 #   ./install.sh user     Services, configs, CLI. Safe to re-run any time.
 #   ./install.sh models   Download the default model set (~150 GB)
 #   ./install.sh all      system + user (then reboot, then `models`)
+#   ./install.sh zsh      Optional: zsh + Oh My Zsh + plugins + the `evo` prompt (docs/11)
 #
 # Every step is idempotent: re-running converges to the same state.
 set -euo pipefail
@@ -348,12 +349,61 @@ install_models() {
   "$REPO_DIR/bin/evo" models pull default
 }
 
+install_zsh() {
+  local omz="$HOME/.oh-my-zsh" custom plug repo ts
+  custom="$omz/custom"
+  step "zsh: package"
+  if command -v zsh >/dev/null 2>&1; then
+    ok "zsh $(zsh --version | cut -d' ' -f2) is installed"
+  else
+    sudo rpm-ostree install zsh
+    warn "zsh is layered but not active until you reboot; re-run './install.sh zsh' afterwards"
+  fi
+
+  step "zsh: Oh My Zsh and plugins"
+  command -v git >/dev/null 2>&1 || die "git is required"
+  [[ -d "$omz" ]] || git clone --depth 1 https://github.com/ohmyzsh/ohmyzsh.git "$omz"
+  mkdir -p "$custom/plugins" "$custom/themes"
+  for repo in \
+    zsh-users/zsh-autosuggestions \
+    zdharma-continuum/fast-syntax-highlighting \
+    marlonrichert/zsh-autocomplete; do
+    plug="$custom/plugins/${repo#*/}"
+    [[ -d "$plug" ]] || git clone --depth 1 "https://github.com/$repo.git" "$plug"
+  done
+  ok "oh-my-zsh + zsh-autosuggestions, fast-syntax-highlighting, zsh-autocomplete"
+
+  step "zsh: ~/.zshrc and the evo theme"
+  cp "$REPO_DIR/config/zsh/evo.zsh-theme" "$custom/themes/evo.zsh-theme"
+  if [[ -f "$HOME/.zshrc" ]] && ! cmp -s "$REPO_DIR/config/zsh/zshrc" "$HOME/.zshrc"; then
+    ts="$(date +%Y%m%d-%H%M%S)"
+    cp "$HOME/.zshrc" "$HOME/.zshrc.bak.$ts"
+    ok "backed up the old ~/.zshrc to ~/.zshrc.bak.$ts"
+  fi
+  cp "$REPO_DIR/config/zsh/zshrc" "$HOME/.zshrc"
+  rm -f "$HOME"/.zcompdump*
+  ok "installed ~/.zshrc and the evo theme"
+
+  step "zsh: login shell"
+  if [[ -x /usr/bin/zsh ]]; then
+    if [[ "$(getent passwd "$USER" | cut -d: -f7)" == /usr/bin/zsh ]]; then
+      ok "login shell is already /usr/bin/zsh"
+    else
+      sudo usermod -s /usr/bin/zsh "$USER"
+      ok "login shell set to /usr/bin/zsh; log out of KDE and back in (Konsole and Ctrl+Alt+T then open zsh)"
+    fi
+  else
+    warn "reboot, then run './install.sh zsh' again to set zsh as the login shell"
+  fi
+}
+
 # Allow `source install.sh` (used by tests) without running anything.
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
   case "${1:-}" in
     system) install_system ;;
     user)   install_user ;;
     models) install_models ;;
+    zsh)    install_zsh ;;
     all)    install_system; install_user ;;
     *) sed -n '2,10p' "$0"; exit 1 ;;
   esac
