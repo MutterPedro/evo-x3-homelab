@@ -524,8 +524,8 @@
   },
   {
    "id": 11,
-   "type": "timeseries",
-   "title": "Disk free",
+   "type": "bargauge",
+   "title": "Disk used (/var: models, containers, home)",
    "datasource": {
     "type": "prometheus",
     "uid": "prometheus"
@@ -533,37 +533,160 @@
    "gridPos": {
     "x": 0,
     "y": 28,
-    "w": 24,
+    "w": 12,
     "h": 6
    },
    "fieldConfig": {
     "defaults": {
-     "unit": "bytes",
-     "custom": {
-      "lineWidth": 2,
-      "fillOpacity": 15,
-      "stacking": {
-       "mode": "none"
-      }
-     },
-     "min": 0
+     "unit": "percentunit",
+     "min": 0,
+     "max": 1,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 0.7
+       },
+       {
+        "color": "red",
+        "value": 0.85
+       }
+      ]
+     }
     },
     "overrides": []
    },
    "options": {
-    "legend": {
-     "displayMode": "list",
-     "placement": "bottom"
-    },
-    "tooltip": {
-     "mode": "multi"
+    "orientation": "horizontal",
+    "displayMode": "gradient",
+    "showUnfilled": true,
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "values": false
     }
    },
    "targets": [
     {
      "refId": "A",
-     "expr": "node_filesystem_avail_bytes{fstype=~\"btrfs|ext4|xfs\",mountpoint=~\"/|/var|/var/home|/host/root.*\"}",
-     "legendFormat": "{{mountpoint}}"
+     "expr": "1 - node_filesystem_avail_bytes{mountpoint=\"/var\"} / node_filesystem_size_bytes{mountpoint=\"/var\"}",
+     "legendFormat": "used"
+    }
+   ]
+  },
+  {
+   "id": 12,
+   "type": "stat",
+   "title": "Disk free",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 12,
+    "y": 28,
+    "w": 6,
+    "h": 6
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "bytes",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "red",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 200000000000.0
+       },
+       {
+        "color": "green",
+        "value": 500000000000.0
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "value",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "values": false
+    }
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "node_filesystem_avail_bytes{mountpoint=\"/var\"}",
+     "legendFormat": "free"
+    }
+   ]
+  },
+  {
+   "id": 13,
+   "type": "stat",
+   "title": "Days until full (at 7-day trend)",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 18,
+    "y": 28,
+    "w": 6,
+    "h": 6
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "d",
+     "decimals": 0,
+     "noValue": "not shrinking",
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "red",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 30
+       },
+       {
+        "color": "green",
+        "value": 90
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "value",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "values": false
+    }
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "(node_filesystem_avail_bytes{mountpoint=\"/var\"} / -deriv(node_filesystem_avail_bytes{mountpoint=\"/var\"}[7d])) / 86400 and deriv(node_filesystem_avail_bytes{mountpoint=\"/var\"}[7d]) < 0",
+     "legendFormat": "days"
     }
    ]
   }
