@@ -31,7 +31,7 @@ if grep -rn '@[A-Z0-9_]\+@' "$out"; then echo "FAIL: unrendered placeholders"; e
 echo "ok  all placeholders rendered"
 
 # 2. YAML parses and the llama-swap config is internally consistent
-python3 - "$out" <<'PY'
+python3 - "$out" "$REPO/config/models.tsv" <<'PY'
 import sys, yaml, pathlib
 d = pathlib.Path(sys.argv[1])
 for f in ["llama-swap.yaml", "searxng.yml", "prometheus.yml", "ds.yaml", "comfy.yaml"]:
@@ -46,6 +46,27 @@ for p in cfg["profiles"].values():
         assert target in cfg["models"], f"profile pin -> unknown model {target}"
 assert cfg["hooks"]["on_startup"]["profile"] in cfg["profiles"]
 print("ok  YAML valid, capacities fit, profile pins resolve")
+
+# Guardrails against the 2026-11-10 out-of-memory reboot (docs/10, docs/13):
+# 1. a model's capacity can never be smaller than its weights (models.tsv GB column);
+#    sizing from GTT alone had declared a 93 GiB model as 72.
+sizes = {}
+for l in open(sys.argv[2]):
+    if l.strip() and not l.startswith("#"):
+        c = l.rstrip("\n").split("\t")
+        sizes[c[0]] = float(c[3])
+for name, m in cfg["models"].items():
+    if name in sizes:
+        need = sizes[name] * 1e9 / 2**30
+        assert m["capacities"]["gpu"] >= need, f"{name}: capacity {m['capacities']['gpu']} GiB < weights {need:.0f} GiB"
+# 2. whatever a profile keeps resident (its pinned models plus the embedder and
+#    whisper that Open WebUI always uses) has to fit the pool together.
+helpers = [n for n in ("qwen3-embedding-0.6b", "whisper-large-v3-turbo") if n in cfg["models"]]
+for pname, p in cfg["profiles"].items():
+    resident = set(p["pins"].values()) | set(helpers)
+    total = sum(cfg["models"][n]["capacities"]["gpu"] for n in resident)
+    assert total <= pool, f"profile {pname}: resident set needs {total} GiB, pool is {pool}"
+print("ok  capacities cover model weights; every profile's resident set fits the pool")
 PY
 python3 -c "import json; json.load(open('$REPO/config/grafana/dashboards/evo-x3.json'))" && echo "ok  dashboard JSON valid"
 

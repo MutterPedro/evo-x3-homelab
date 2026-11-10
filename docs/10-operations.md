@@ -56,7 +56,7 @@ curl -sG localhost:9091/api/v1/query_range --data-urlencode 'query=node_memory_M
 
 **When adding or changing a model**, load it alone, wait for the first long prompt, and read `MemTotal - MemAvailable` (Grafana's node dashboard, or `free -g`). Set `capacities.gpu` to that minus ~8 GiB for the desktop. Do not use GTT alone.
 
-**Remaining risk.** The pool (112 GiB) plus the desktop and services leaves little headroom of the 124 GiB. A guard that kills the model server before the whole machine hangs (systemd-oomd with memory-pressure limits on the user slice, or earlyoom) is not installed yet.
+**Safety net added.** `evo-memguard` (a user service) watches the system-wide `MemAvailable` and unloads models, then kills the model containers, before the machine freezes; the capacity regression tests now run in CI. `systemd-oomd` alone could not have caught this, because GPU-pinned memory is charged to no cgroup. The design, thresholds and how to test it are in [13-guardrails](13-guardrails.md).
 
 ## Rebuild from scratch (the whole point of this repo)
 

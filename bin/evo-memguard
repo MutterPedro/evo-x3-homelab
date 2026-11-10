@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+# evo-memguard: keep the machine alive when model memory runs out.
+#
+# Background: the GPU's memory is system RAM that is pinned and charged to no
+# cgroup, so MemoryMax and systemd-oomd (which watch cgroup pressure) cannot see
+# most of it. When RAM ran out on 2026-11-10 the box froze until the hardware
+# watchdog rebooted it (docs/10-operations.md). This guard watches the
+# system-wide MemAvailable instead, which does include pinned GPU memory:
+#
+#   soft: available < EVO_MEMGUARD_SOFT_GIB for 3 s in a row -> ask llama-swap to unload every model
+#   hard: available < EVO_MEMGUARD_HARD_GIB, or zram swap used > EVO_MEMGUARD_SWAP_GIB
+#         -> kill every evo-* model container right now
+#
+# After acting it waits EVO_MEMGUARD_COOLDOWN seconds so a client that retries
+# cannot start a reload loop. It is a last line of defence: the capacity router
+# (config.yaml.tmpl) should prevent the situation in the first place.
+#
+#   evo-memguard            run the guard (what the systemd unit does)
+#   evo-memguard --status   print the current numbers and thresholds, then exit
+set -uo pipefail
+
+# Settings come from the user's evo.env (the systemd unit also loads it).
+# shellcheck disable=SC1091
+[[ -r "${EVO_ENV:-$HOME/.config/evo/evo.env}" ]] && source "${EVO_ENV:-$HOME/.config/evo/evo.env}"
+SOFT="${EVO_MEMGUARD_SOFT_GIB:-6}"
+HARD="${EVO_MEMGUARD_HARD_GIB:-3}"
+SWAP_MAX="${EVO_MEMGUARD_SWAP_GIB:-8}"
+COOLDOWN="${EVO_MEMGUARD_COOLDOWN:-30}"
+API="http://127.0.0.1:${EVO_LLAMA_SWAP_PORT:-8080}"
+
+log() { echo "evo-memguard: $*"; }                  # goes to the journal
+note() { notify-send -u critical -a EVO "EVO memory guard" "$1" 2>/dev/null || true; }
+
+# prints: "<available GiB> <zram/swap used GiB>" with one decimal, from /proc/meminfo
+read_mem() {
+  awk '/^MemAvailable:/{a=$2} /^SwapTotal:/{st=$2} /^SwapFree:/{sf=$2}
+       END{printf "%.1f %.1f\n", a/1048576, (st-sf)/1048576}' /proc/meminfo
+}
+lt() { awk -v a="$1" -v b="$2" 'BEGIN{exit !(a<b)}'; }   # float a < b
+gt() { awk -v a="$1" -v b="$2" 'BEGIN{exit !(a>b)}'; }
+
+if [[ "${1:-}" == "--status" ]]; then
+  read -r avail swap < <(read_mem)
+  echo "available ${avail} GiB (soft < ${SOFT}, hard < ${HARD}); swap used ${swap} GiB (hard > ${SWAP_MAX})"
+  exit 0
+fi
+
+kill_models() {
+  local ids; ids="$(podman ps -q --filter name='^evo-' 2>/dev/null)"
+  [[ -n "$ids" ]] || { log "no model containers running"; return 0; }
+  # shellcheck disable=SC2086
+  podman kill $ids >/dev/null 2>&1
+  log "killed model containers: $(podman ps -a --filter name='^evo-' --format '{{.Names}}' | tr '\n' ' ')"
+}
+
+unload_models() {
+  curl -fsS --max-time 15 -X POST -H "Authorization: Bearer ${LLAMA_SWAP_KEY:-}" "$API/api/models/unload" >/dev/null 2>&1
+}
+
+log "started: soft < ${SOFT} GiB, hard < ${HARD} GiB, swap > ${SWAP_MAX} GiB, cooldown ${COOLDOWN}s"
+low=0
+while true; do
+  read -r avail swap < <(read_mem)
+  if lt "$avail" "$HARD" || gt "$swap" "$SWAP_MAX"; then
+    log "HARD: available ${avail} GiB, swap used ${swap} GiB: killing model containers"
+    kill_models; note "Memory ran out (${avail} GiB free): model containers were stopped to protect the system."
+    low=0; sleep "$COOLDOWN"; continue
+  fi
+  if lt "$avail" "$SOFT"; then
+    low=$((low + 1))
+    if ((low >= 3)); then
+      log "SOFT: available ${avail} GiB for ${low}s: unloading all models"
+      if ! unload_models; then log "unload request failed, killing containers"; kill_models; fi
+      note "Memory was low (${avail} GiB free): models were unloaded."
+      low=0; sleep "$COOLDOWN"; continue
+    fi
+  else
+    low=0
+  fi
+  sleep 1
+done

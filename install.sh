@@ -294,6 +294,7 @@ install_user() {
   ok "llama-swap config validated"
   ln -sf "$REPO_DIR/bin/evo" "$BIN_DIR/evo"
   ln -sf "$REPO_DIR/bin/evo-notify" "$BIN_DIR/evo-notify"
+  ln -sf "$REPO_DIR/bin/evo-memguard" "$BIN_DIR/evo-memguard"
   ok "evo CLI -> $BIN_DIR/evo"
 
   step "Containers (podman quadlets) and user services"
@@ -318,9 +319,10 @@ install_user() {
   echo "    (ROCm and ComfyUI images are pulled on first use: evo images pull-all)"
 
   step "Starting services"
-  systemctl --user enable llama-swap.service evo-backup.timer podman-auto-update.timer
+  systemctl --user enable llama-swap.service evo-memguard.service evo-backup.timer podman-auto-update.timer
   systemctl --user start evo-backup.timer podman-auto-update.timer
   # restart (not just start) so re-runs pick up changed configs
+  systemctl --user restart evo-memguard.service
   systemctl --user restart llama-swap.service searxng.service open-webui.service \
     node-exporter.service prometheus.service grafana.service
   ok "services started"

@@ -73,6 +73,7 @@ flowchart LR
 | – | Updates, rollback, troubleshooting, rebuild | [10-operations](docs/10-operations.md) |
 | – | zsh, Oh My Zsh and the mode-aware prompt | [11-shell-zsh](docs/11-shell-zsh.md) |
 | – | opencode coding agent on the local models | [12-opencode](docs/12-opencode.md) |
+| – | Memory guard, watchdog and the guardrail pattern | [13-guardrails](docs/13-guardrails.md) |
 
 ```bash
 # on the freshly installed Bazzite, in a terminal (Konsole)
@@ -125,7 +126,7 @@ config/llama-swap/            model definitions, profiles, capacity router
 config/models.tsv             which Hugging Face files each model needs
 config/open-webui.env         Open WebUI wiring (models, RAG, search, voice)
 quadlets/                     rootless podman services (Open WebUI, SearXNG, Grafana…)
-systemd/user/                 llama-swap service, nightly backup timer
+systemd/user/                 llama-swap service, memory guard, nightly backup timer
 system/                       files installed under /etc (Wi-Fi, watchdog)
 desktop/                      app-menu launchers for the three modes
 config/opencode/               opencode provider config for the local models (API key via $EVO_API_KEY)

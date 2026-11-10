@@ -332,10 +332,26 @@ cmd_doctor() {
   [[ "$(loginctl show-user "$USER" -p Linger 2>/dev/null)" == *yes* ]] && pass "linger on (services run without login)" || { fail "linger off"; hint "sudo loginctl enable-linger $USER"; }
 
   info "Services"
-  local s; for s in llama-swap open-webui searxng prometheus grafana node-exporter; do
+  local s; for s in llama-swap evo-memguard open-webui searxng prometheus grafana node-exporter; do
     systemctl --user is-active -q "$s" && pass "$s running" || { fail "$s not running"; hint "journalctl --user -u $s -n 50"; }
   done
   api_up && pass "llama-swap API answering on :$EVO_LLAMA_SWAP_PORT" || fail "llama-swap API not answering"
+
+  info "Guardrails"
+  if systemctl --user is-active -q evo-memguard; then
+    pass "memory guard active ($(evo-memguard --status 2>/dev/null))"
+  else
+    fail "memory guard not running"; hint "./install.sh user   (docs/13-guardrails.md)"
+  fi
+  local pool_gib="${EVO_GPU_POOL_GIB:-112}" gtt_gib="${EVO_GTT_GIB:-120}"
+  (( pool_gib <= gtt_gib - 8 )) && pass "pool ${pool_gib} GiB leaves >= 8 GiB below GTT ${gtt_gib} GiB" \
+    || { fail "pool ${pool_gib} GiB is too close to GTT ${gtt_gib} GiB"; hint "keep EVO_GPU_POOL_GIB <= EVO_GTT_GIB - 8"; }
+  local avail; avail="$(awk '/^MemAvailable:/{printf "%d", $2/1048576}' /proc/meminfo)"
+  (( avail >= 12 )) && pass "${avail} GiB RAM available right now" \
+    || { fail "only ${avail} GiB RAM available right now"; hint "a model is using most memory; 'evo mode game' unloads everything"; }
+  [[ -e /dev/watchdog0 ]] && grep -q '^RuntimeWatchdogSec' /etc/systemd/system.conf.d/*watchdog* 2>/dev/null \
+    && pass "hardware watchdog armed (final safety net)" \
+    || { fail "hardware watchdog not configured"; hint "./install.sh system"; }
 
   info "Models on disk"
   grep -v '^#' "$REPO_DIR/config/models.tsv" | awk -F'\t' '$5=="yes"{print $1"\t"$2}' | while IFS=$'\t' read -r n r; do
