@@ -28,7 +28,7 @@ What to watch:
 ```bash
 # 1. connect Google Drive (opens a browser for Google login)
 rclone config
-#   n) New remote → name: gdrive → storage: drive → leave client_id/secret empty
+#   n) New remote → name: gdrive → storage: drive → client_id/secret: use your own (see below)
 #   scope: 1 (full) or 3 (drive.file) → auto config: y → login in the browser
 rclone lsd gdrive:            # should list your Drive folders
 
@@ -43,6 +43,12 @@ evo backup list
 **Save the restic password somewhere outside this machine** (password manager): `evo secret restic`. Without it the backup can't be decrypted. `~/.config/evo/secrets.env` is inside the backup, which is no help if the disk dies.
 
 Retention: 7 daily, 4 weekly, 6 monthly (`EVO_BACKUP_KEEP_*` in `evo.env`). Status: `systemctl --user list-timers evo-backup.timer` and `journalctl --user -u evo-backup`.
+
+> **Use your own Google client_id.** rclone's built-in shared client_id is being retired during 2026 (`rclone lsd` prints a NOTICE about it), after which the remote stops working. Create one in the [Google Cloud console](https://rclone.org/drive/#making-your-own-client-id) (OAuth client, type Desktop app) and set `client_id` / `client_secret` with `rclone config update gdrive client_id=… client_secret=…`, then re-authorize with `rclone config reconnect gdrive:`.
+>
+> **Save the restic password somewhere off this machine** (`evo secret restic`, e.g. in your password manager). Without it the encrypted repository on Drive is unrecoverable, and it lives only in `~/.config/evo/secrets.env`, which is not in the backup.
+>
+> Verified on this box: init, backup (~50 MiB: config, Open WebUI, Grafana, state) and a full restore of the Open WebUI database all work; a daily timer runs the backup at ~04:30.
 
 ### Restore (new install or disaster)
 
