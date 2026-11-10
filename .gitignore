@@ -1,5 +1,6 @@
-# never commit generated configs or secrets
-secrets.env
-runtime.env
-*.local
 .DS_Store
+*.local
+# never commit generated configs or secrets
+__pycache__/
+runtime.env
+secrets.env

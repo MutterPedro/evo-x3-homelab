@@ -17,3 +17,9 @@ scrape_configs:
       credentials: "@LLAMA_SWAP_KEY@"
     static_configs:
       - targets: ["127.0.0.1:@EVO_LLAMA_SWAP_PORT@"]
+
+  # evo-exporter: per-model llama-server metrics (tokens/s, MTP acceptance...),
+  # evo mode/profile, backups, memory-guard events, cloud prices for the savings panels.
+  - job_name: evo
+    static_configs:
+      - targets: ["127.0.0.1:@EVO_EXPORTER_PORT@"]

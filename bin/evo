@@ -7,6 +7,7 @@
 #   evo run -- <command>           Steam launch wrapper: game mode while it runs
 #   evo models list|pull|du        Manage downloaded models
 #   evo bench <model>              Quick tokens/s measurement through the API
+#   evo bench --all                Same prompt on every model; fills Grafana's comparison charts
 #   evo backup init|run|list       Encrypted backups to Google Drive (restic)
 #   evo secret api-key|grafana     Print a generated secret
 #   evo logs [service]             Follow logs (default: llama-swap)
@@ -222,7 +223,37 @@ cmd_models() {
   esac
 }
 
+# Controlled benchmark: the same ~10k-token prompt on every downloaded chat model, one
+# at a time, so the numbers are comparable. Results go to the Grafana comparison chart.
+bench_all() {
+  api_up || die "llama-swap is not answering (is 'evo mode game' on? run 'evo mode server')"
+  local prompt n model have=0 res g p
+  # no `yes | head` here: under pipefail its SIGPIPE (141) would silently abort the function
+  prompt="Resuma: $(printf 'O rato roeu a roupa do rei de Roma. %.0s' $(seq 1 900))"
+  mkdir -p "$STATE_DIR"; [[ -s "$STATE_DIR/bench.json" ]] || echo '{}' >"$STATE_DIR/bench.json"
+  info "benchmarking every chat model on one ~10k-token prompt (about 5 minutes; all models are unloaded first)"
+  printf '  %-24s %12s %12s\n' MODEL "prompt tok/s" "gen tok/s"
+  while IFS=$'\t' read -r n repo _ _ dflt _; do
+    [[ "$dflt" == yes && "$n" != *embedding* && "$n" != *whisper* ]] || continue
+    [[ -d "$EVO_MODELS_DIR/$repo" ]] || continue
+    model="$n"; have=1
+    api POST /api/models/unload >/dev/null 2>&1 || true; sleep 8
+    res="$(curl -fsS --max-time 1800 -H "Authorization: Bearer ${LLAMA_SWAP_KEY}" -H 'Content-Type: application/json' \
+      "$API/v1/chat/completions" -d "$(jq -n --arg m "$model" --arg p "$prompt" \
+        '{model:$m, messages:[{role:"user",content:$p}], max_tokens:200, stream:false}')")" || { echo "  $model: request failed"; continue; }
+    g="$(jq -r '.timings.predicted_per_second // 0' <<<"$res")"; p="$(jq -r '.timings.prompt_per_second // 0' <<<"$res")"
+    printf '  %-24s %12.0f %12.1f\n' "$model" "$p" "$g"
+    jq --arg m "$model" --argjson g "$g" --argjson p "$p" --argjson t "$(date +%s)" \
+      '. + {($m): {generation:$g, prompt:$p, ts:$t}}' "$STATE_DIR/bench.json" >"$STATE_DIR/bench.json.tmp" \
+      && mv "$STATE_DIR/bench.json.tmp" "$STATE_DIR/bench.json"
+  done < <(grep -v '^#' "$REPO_DIR/config/models.tsv")
+  ((have)) || die "no chat models downloaded (evo models pull default)"
+  api POST /api/models/unload >/dev/null 2>&1 || true
+  echo "  saved to $STATE_DIR/bench.json (Grafana: EVO-X3 LLM -> Model comparison)"
+}
+
 cmd_bench() {
+  [[ "${1:-}" == "--all" ]] && { bench_all; return; }
   local model="${1:-chat}" prompt="${2:-Write a 400-word story about a lighthouse keeper.}"
   info "benchmarking '$model' (first call includes load time)"
   local t0 out
@@ -257,6 +288,7 @@ cmd_backup() {
         "$EVO_COMFY_DIR/comfy-outputs" "$HOME/.local/state/evo" || rc=$?
       ((was_up)) && systemctl --user start open-webui
       ((rc == 0)) || die "restic backup failed ($rc)"
+      mkdir -p "$STATE_DIR"; date +%s >"$STATE_DIR/last-backup"   # read by evo-exporter -> Grafana
       restic forget --prune --tag evo --keep-daily "$EVO_BACKUP_KEEP_DAILY" \
         --keep-weekly "$EVO_BACKUP_KEEP_WEEKLY" --keep-monthly "$EVO_BACKUP_KEEP_MONTHLY" ;;
     list) restic snapshots ;;

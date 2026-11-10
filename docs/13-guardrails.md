@@ -14,7 +14,8 @@ Each layer below catches what slips past the one before. None of them is optiona
 | 2 | **Regression test** | CI fails if a model's capacity is smaller than its weights, or a profile's resident set does not fit the pool. | `tests/render-test.sh` |
 | 3 | **Memory guard** | Watches system-wide `MemAvailable` every second. Under 6 GiB for 3 s → unload all models; under 3 GiB or zram swap above 8 GiB → kill the model containers, 30 s cooldown. | `bin/evo-memguard`, `systemd/user/evo-memguard.service`, settings `EVO_MEMGUARD_*` in `evo.env` |
 | 4 | **Hardware watchdog** | If the kernel stops responding for 60 s the board resets itself, so the server comes back unattended. Last resort; it loses whatever was in flight. | `system/systemd/99-evo-watchdog.conf` |
-| 5 | **`evo doctor`** | Reports whether the guard and watchdog are active, whether the pool leaves room below GTT, and how much RAM is free right now. | `evo doctor` → *Guardrails* |
+| 5 | **Grafana** | The *EVO-X3 LLM* dashboard draws free RAM against the guard's limits and marks every guard intervention and reboot. | `docs/09` |
+| 6 | **`evo doctor`** | Reports whether the guard and watchdog are active, whether the pool leaves room below GTT, and how much RAM is free right now. | `evo doctor` → *Guardrails* |
 
 ### Why a custom guard and not systemd-oomd
 
@@ -66,6 +67,6 @@ Candidates worth doing next, in rough order of likelihood on this box:
 | Thermal throttling or fan failure | BIOS fan mode Automatic | Grafana alert on package temp > 90 °C for 5 min → unload models |
 | A service stuck "active" but not answering | `Restart=always` on every unit | Health checks in `evo doctor` plus a timer that restarts Open WebUI/llama-swap when `/health` fails 3 times |
 | Wi-Fi drops (no Ethernet) | Wi-Fi power saving is off | Timer that reconnects and logs the outage; see the router/DHCP note in [05-bootstrap](05-bootstrap.md) |
-| Backups silently stop | `evo-backup.timer` | `evo doctor` compares the latest snapshot's age to 36 h |
+| Backups silently stop | `evo-backup.timer` | Grafana's *Last backup* stat turns orange after 36 h (built); a matching `evo doctor` check is not |
 
 Tell me which of these you want next and they go through the same five steps.

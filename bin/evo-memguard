@@ -29,6 +29,8 @@ COOLDOWN="${EVO_MEMGUARD_COOLDOWN:-30}"
 API="http://127.0.0.1:${EVO_LLAMA_SWAP_PORT:-8080}"
 
 log() { echo "evo-memguard: $*"; }                  # goes to the journal
+EVENTS="${XDG_STATE_HOME:-$HOME/.local/state}/evo/memguard.events"
+event() { mkdir -p "$(dirname "$EVENTS")"; echo "$(date +%s) $1" >>"$EVENTS"; }   # read by evo-exporter -> Grafana
 note() { notify-send -u critical -a EVO "EVO memory guard" "$1" 2>/dev/null || true; }
 
 # prints: "<available GiB> <zram/swap used GiB>" with one decimal, from /proc/meminfo
@@ -63,12 +65,13 @@ while true; do
   read -r avail swap < <(read_mem)
   if lt "$avail" "$HARD" || gt "$swap" "$SWAP_MAX"; then
     log "HARD: available ${avail} GiB, swap used ${swap} GiB: killing model containers"
-    kill_models; note "Memory ran out (${avail} GiB free): model containers were stopped to protect the system."
+    event hard; kill_models; note "Memory ran out (${avail} GiB free): model containers were stopped to protect the system."
     low=0; sleep "$COOLDOWN"; continue
   fi
   if lt "$avail" "$SOFT"; then
     low=$((low + 1))
     if ((low >= 3)); then
+      event soft
       log "SOFT: available ${avail} GiB for ${low}s: unloading all models"
       if ! unload_models; then log "unload request failed, killing containers"; kill_models; fi
       note "Memory was low (${avail} GiB free): models were unloaded."

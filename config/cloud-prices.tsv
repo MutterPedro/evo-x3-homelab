@@ -1,0 +1,7 @@
+model	cloud_model	input_usd_per_mtok	output_usd_per_mtok	note
+# What the money-saved panels compare against. A judgement call: edit freely, then `./install.sh user`.
+# Prices: Anthropic API list prices, checked 2026-11-03 (Haiku 5.5 is for prompts up to 100K tokens). Update them when they change.
+qwen3.8-flash-next	claude-sonnet-5-5	2.00	10.00	best local model vs a current Sonnet
+gpt-oss-120b	claude-haiku-5-5	0.10	0.50	mid-tier
+qwen3.6-35b-a3b	claude-haiku-5-5	0.10	0.50	mid-tier
+gemma-4-26b-a4b	claude-haiku-5-5	0.10	0.50	mid-tier

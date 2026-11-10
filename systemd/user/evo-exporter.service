@@ -1,0 +1,15 @@
+# Prometheus exporter for the LLM dashboard (see bin/evo-exporter).
+[Unit]
+Description=EVO exporter (per-model LLM metrics for Prometheus)
+After=llama-swap.service
+
+[Service]
+Type=simple
+EnvironmentFile=@EVO_CONFIG_DIR@/runtime.env
+EnvironmentFile=@EVO_CONFIG_DIR@/secrets.env
+ExecStart=%h/.local/bin/evo-exporter
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=default.target

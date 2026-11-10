@@ -172,7 +172,7 @@
    "targets": [
     {
      "refId": "A",
-     "expr": "max(llamaswap_gpu_power_draw_watts)"
+     "expr": "sum(node_hwmon_power_average_watt)"
     }
    ]
   },
@@ -421,7 +421,7 @@
    "targets": [
     {
      "refId": "A",
-     "expr": "llamaswap_gpu_power_draw_watts",
+     "expr": "sum(node_hwmon_power_average_watt)",
      "legendFormat": "APU package"
     }
    ]
@@ -570,9 +570,23 @@
  ],
  "links": [],
  "annotations": {
-  "list": []
+  "list": [
+   {
+    "name": "Reboot",
+    "datasource": {
+     "type": "prometheus",
+     "uid": "prometheus"
+    },
+    "enable": true,
+    "iconColor": "red",
+    "expr": "changes(node_boot_time_seconds[2m]) > 0",
+    "step": "60s",
+    "titleFormat": "reboot"
+   }
+  ]
  },
  "templating": {
   "list": []
- }
+ },
+ "description": "Hardware overview. LLM speed, model comparison and money saved are on the \"EVO-X3 LLM\" dashboard."
 }

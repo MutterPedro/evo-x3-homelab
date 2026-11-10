@@ -127,13 +127,15 @@ config/llama-swap/            model definitions, profiles, capacity router
 config/models.tsv             which Hugging Face files each model needs
 config/open-webui.env         Open WebUI wiring (models, RAG, search, voice)
 quadlets/                     rootless podman services (Open WebUI, SearXNG, Grafana…)
-systemd/user/                 llama-swap service, memory guard, nightly backup timer
+systemd/user/                 llama-swap, memory guard, Grafana exporter, nightly backup timer
 system/                       files installed under /etc (Wi-Fi, watchdog)
 desktop/                      app-menu launchers for the three modes
+config/cloud-prices.tsv         cloud prices behind Grafana's money-saved estimate
 config/Brewfile               developer tools installed by `./install.sh devtools`
 config/opencode/               opencode provider config for the local models (API key via $EVO_API_KEY)
 config/zsh/                   zshrc + `evo` prompt theme (mode, profile and GPU memory in the prompt)
 docs/                         the full guide
+tools/grafana/                generator + query checker for the Grafana dashboards
 tests/render-test.sh          CI: renders all templates and boots llama-swap with them
 tools/windows/                PowerShell helpers to install Bazzite from an internal partition (no USB)
 ```

@@ -81,6 +81,9 @@ print("ok  capacities cover model weights; every profile's resident set fits the
 PY
 $PYTHON -c "import json; json.load(open('$REPO/config/grafana/dashboards/evo-x3.json'))" && echo "ok  dashboard JSON valid"
 
+# 2b. the Grafana exporter: pass-through, lifetime totals, restarts
+$PYTHON "$REPO/tests/exporter_test.py"
+
 # 3. every model file referenced by llama-swap can be downloaded via models.tsv
 $PYTHON - "$out/llama-swap.yaml" "$REPO/config/models.tsv" <<'PY'
 import sys, re, fnmatch

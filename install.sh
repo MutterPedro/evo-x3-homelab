@@ -35,6 +35,9 @@ load_settings() {
   fi
   # shellcheck source=config/evo.env.example
   set -a; source "$EVO_CONFIG_DIR/evo.env"; set +a
+  # settings added after your evo.env was created keep working with these defaults
+  : "${EVO_EXPORTER_PORT:=9102}" "${EVO_KWH_PRICE_BRL:=0.90}" "${EVO_USD_BRL:=5.50}" "${EVO_POWER_OVERHEAD_W:=15}"
+  export EVO_EXPORTER_PORT EVO_KWH_PRICE_BRL EVO_USD_BRL EVO_POWER_OVERHEAD_W
 }
 
 check_platform() {
@@ -308,6 +311,8 @@ install_user() {
   ln -sf "$REPO_DIR/bin/evo" "$BIN_DIR/evo"
   ln -sf "$REPO_DIR/bin/evo-notify" "$BIN_DIR/evo-notify"
   ln -sf "$REPO_DIR/bin/evo-memguard" "$BIN_DIR/evo-memguard"
+  ln -sf "$REPO_DIR/bin/evo-exporter" "$BIN_DIR/evo-exporter"
+  install -Dm644 "$REPO_DIR/config/cloud-prices.tsv" "$EVO_CONFIG_DIR/cloud-prices.tsv"
   ok "evo CLI -> $BIN_DIR/evo"
 
   step "Containers (podman quadlets) and user services"
@@ -332,10 +337,10 @@ install_user() {
   echo "    (ROCm and ComfyUI images are pulled on first use: evo images pull-all)"
 
   step "Starting services"
-  systemctl --user enable llama-swap.service evo-memguard.service evo-backup.timer podman-auto-update.timer
+  systemctl --user enable llama-swap.service evo-memguard.service evo-exporter.service evo-backup.timer podman-auto-update.timer
   systemctl --user start evo-backup.timer podman-auto-update.timer
   # restart (not just start) so re-runs pick up changed configs
-  systemctl --user restart evo-memguard.service
+  systemctl --user restart evo-memguard.service evo-exporter.service
   systemctl --user restart llama-swap.service searxng.service open-webui.service \
     node-exporter.service prometheus.service grafana.service
   ok "services started"
