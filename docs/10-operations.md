@@ -36,6 +36,28 @@ Start with **`evo doctor`**. It checks kernel args, GTT size, BIOS carve-out, gr
 
 Logs: `evo logs` (llama-swap) · `evo logs open-webui` · `journalctl --user -u <service>` · `journalctl -b -p err` (system).
 
+## Out-of-memory reboot (2026-11-10)
+
+**What happened.** An opencode session asked for the smartest model while Gemma was already loaded (Open WebUI keeps it warm). Flash-Next loaded beside it, host memory went from 28 GiB to 124 of 124 GiB in about 90 seconds, the 16 GiB zram swap filled, the desktop froze (`kwin_wayland: The main thread was hanging`), and 60 s later the hardware watchdog rebooted the machine. The previous boot's journal simply stops: there is no OOM-killer line, because the kernel never got to run it.
+
+**Why.** Temperature (78 °C) and power (116 W) were normal. The cause was a wrong capacity: Flash-Next was declared as 72 GiB because `mem_info_gtt_used` showed ~70 GiB, but the weights alone are ~86 GiB and the process holds ~100-110 GiB of host memory (the solo benchmark on 1 Nov already peaked at 121 of 124 GiB). The router believed Flash-Next + Gemma + helpers fit in the 112 GiB pool, so it loaded them together.
+
+**Fixed in the repo.** Flash-Next is now `capacities.gpu: 104`, so the router unloads everything else before loading it, and the `smart` profile no longer pins Gemma as `fast` (that would swap a 100 GB model in and out on every quick request). To keep Gemma beside a big model, use the `fast` profile (gpt-oss + Qwen3.6, ~100 GiB) or switch Flash-Next to the smaller IQ3 quant (`evo models pull qwen3.8-flash-next-iq3`, then point the model at it and lower its capacity after measuring).
+
+**How to diagnose a reboot like this.**
+
+```bash
+journalctl --list-boots | tail -3
+journalctl -b -1 -n 60 --no-pager        # abrupt end, no shutdown lines = hang/reset
+# Prometheus keeps the last 30 days; host memory, swap, temperature, power around the time:
+curl -sG localhost:9091/api/v1/query_range --data-urlencode 'query=node_memory_MemTotal_bytes-node_memory_MemAvailable_bytes' \
+  --data-urlencode "start=$(date -d '14:40' +%s)" --data-urlencode "end=$(date -d '14:55' +%s)" --data-urlencode step=30
+```
+
+**When adding or changing a model**, load it alone, wait for the first long prompt, and read `MemTotal - MemAvailable` (Grafana's node dashboard, or `free -g`). Set `capacities.gpu` to that minus ~8 GiB for the desktop. Do not use GTT alone.
+
+**Remaining risk.** The pool (112 GiB) plus the desktop and services leaves little headroom of the 124 GiB. A guard that kills the model server before the whole machine hangs (systemd-oomd with memory-pressure limits on the user slice, or earlyoom) is not installed yet.
+
 ## Rebuild from scratch (the whole point of this repo)
 
 1. BIOS settings ([03-bios](03-bios.md)), about 5 min

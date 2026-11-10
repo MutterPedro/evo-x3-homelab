@@ -37,13 +37,13 @@ Point every client at **`chat`, `code`, `vision` or `fast`**, never at a concret
 
 | Profile | chat | code | vision | fast | Typical resident set |
 |---|---|---|---|---|---|
-| **smart** (default) | Flash-Next | Flash-Next | Flash-Next | Gemma 4 | Flash-Next + Gemma 4 + embeddings + whisper ≈ 99 GiB |
+| **smart** (default) | Flash-Next | Flash-Next | Flash-Next | Flash-Next | Flash-Next (~104 GiB) + embeddings + whisper ≈ 110 GiB; nothing else big fits |
 | **fast** | gpt-oss-120b | Qwen3.6 | Qwen3.6 | Qwen3.6 | gpt-oss + Qwen3.6 + helpers ≈ 100 GiB |
 | **multi** | Gemma 4 | Qwen3.6 | Gemma 4 | Gemma 4 | ≈ 53 GiB, leaving ~60 GB for ComfyUI |
 
 ### Measured performance
 
-Measured on the EVO-X3 (Bazzite 44, kernel 7.2, BIOS V1.01 Performance mode, GTT 120 GiB) with a ~10k-token Portuguese prompt, one request at a time, models loaded from cold. "GTT" is `mem_info_gtt_used` after the request; `capacities.gpu` is that plus ~2 GiB.
+Measured on the EVO-X3 (Bazzite 44, kernel 7.2, BIOS V1.01 Performance mode, GTT 120 GiB) with a ~10k-token Portuguese prompt, one request at a time, models loaded from cold. "GTT" is `mem_info_gtt_used` after the request; `capacities.gpu` is that plus ~2 GiB, **except for Flash-Next**, whose real footprint is ~104 GiB of host memory although GTT shows only 70 (see [10-operations](10-operations.md#out-of-memory-reboot-2026-11-10)). Size capacities from `MemTotal - MemAvailable`, not from GTT.
 
 | Model | Backend | Prompt (tok/s) | Generation (tok/s) | GTT (GiB) |
 |---|---|---|---|---|

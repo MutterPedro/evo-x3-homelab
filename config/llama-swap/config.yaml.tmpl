@@ -54,13 +54,15 @@ macros:
 models:
   # ===========================================================================
   # SMART: Qwen3.8 Flash-Next 125B-A6B (vision + reasoning + coding)
-  # ~94 GB at UD-IQ4_XS (measured: ~70 GiB GTT at 128k context). Top open model that fits in 128 GB (Oct 2026).
+  # ~94 GB at UD-IQ4_XS. Real footprint is ~100-110 GiB of host memory at 128k context:
+  # GTT reports only ~70 GiB of it, so never size capacities from GTT alone (see docs/10).
+  # Top open model that fits in 128 GB (Oct 2026).
   # Multi-token prediction (MTP) speculative decoding gives ~1.3-1.7x speed.
   # ===========================================================================
   "qwen3.8-flash-next":
     name: "Qwen3.8 Flash-Next 125B (smart)"
-    description: "Best quality. Vision, tools, long context. Uses ~70 GiB of GPU memory."
-    capacities: { gpu: 72 }
+    description: "Best quality. Vision, tools, long context. Uses ~104 GiB of memory: nothing big fits beside it."
+    capacities: { gpu: 104 }
     evict_cost: 50              # slow to reload (~94 GB), keep it if possible
     concurrencyLimit: 4
     cmd: |
@@ -221,12 +223,12 @@ models:
 # ---------------------------------------------------------------------------
 profiles:
   smart:
-    description: "Best quality: Qwen3.8 Flash-Next for everything, Gemma for quick replies"
+    description: "Best quality: Qwen3.8 Flash-Next for everything. It needs ~104 GiB, so nothing big can stay loaded beside it"
     pins:
       chat: "qwen3.8-flash-next"
       code: "qwen3.8-flash-next"
       vision: "qwen3.8-flash-next"
-      fast: "gemma-4-26b-a4b"
+      fast: "qwen3.8-flash-next"
   fast:
     description: "Speed: gpt-oss-120b + Qwen3.6 (code and vision), both loaded together"
     pins:
