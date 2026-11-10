@@ -13,7 +13,7 @@ Each layer below catches what slips past the one before. None of them is optiona
 | 1 | **Capacity router** | Only models whose declared sizes fit the pool (112 GiB) are loaded together; a new one evicts the cheapest others first. Prevents the problem. | `capacities.gpu` + `routing` in `config/llama-swap/config.yaml.tmpl` |
 | 2 | **Regression test** | CI fails if a model's capacity is smaller than its weights, or a profile's resident set does not fit the pool. | `tests/render-test.sh` |
 | 3 | **Memory guard** | Watches system-wide `MemAvailable` every second. Under 6 GiB for 3 s → unload all models; under 3 GiB or zram swap above 8 GiB → kill the model containers, 30 s cooldown. | `bin/evo-memguard`, `systemd/user/evo-memguard.service`, settings `EVO_MEMGUARD_*` in `evo.env` |
-| 4 | **Hardware watchdog** | If the kernel stops responding for 60 s the board resets itself, so the server comes back unattended. Last resort; it loses whatever was in flight. | `system/systemd/system.conf.d/99-evo-watchdog.conf` |
+| 4 | **Hardware watchdog** | If the kernel stops responding for 60 s the board resets itself, so the server comes back unattended. Last resort; it loses whatever was in flight. | `system/systemd/99-evo-watchdog.conf` |
 | 5 | **`evo doctor`** | Reports whether the guard and watchdog are active, whether the pool leaves room below GTT, and how much RAM is free right now. | `evo doctor` → *Guardrails* |
 
 ### Why a custom guard and not systemd-oomd
