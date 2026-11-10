@@ -1,0 +1,39 @@
+# Developer tools for humans and coding agents, installed with Homebrew (user
+# space: no sudo, no reboot, nothing layered onto the immutable Bazzite image).
+#   ./install.sh devtools        (or: brew bundle --file config/Brewfile)
+# Already on Bazzite and therefore not listed: git, gcc, make, curl, wget, tmux,
+# fzf, just, tree, btop, zstd, podman, distrobox. uv, jq, restic, rclone come
+# from `./install.sh user`. See docs/14-devtools.md.
+
+# --- languages and their package managers -----------------------------------
+brew "node"            # node, npm, npx, corepack (for pnpm/yarn)
+brew "go"
+brew "rust"            # rustc, cargo, clippy, rustfmt
+brew "rust-analyzer"   # language server for editors/agents
+brew "ruff"            # Python linter + formatter (Python itself: system python3 + uv)
+
+# --- GitHub and data wrangling -------------------------------------------------
+brew "gh"              # GitHub CLI
+brew "jq"              # JSON
+brew "yq"              # YAML/TOML/XML (mikefarah/yq, jq-like syntax)
+brew "sqlite"          # sqlite3 shell (Open WebUI and Grafana use SQLite)
+
+# --- search, files, viewing ----------------------------------------------------
+brew "ripgrep"         # rg: fast recursive grep, what agents reach for first
+brew "fd"              # find, with sane defaults
+brew "bat"             # cat with syntax highlighting
+brew "eza"             # modern ls
+brew "git-delta"       # readable git diffs
+brew "tealdeer"        # tldr: short man-page examples (run `tldr --update` once)
+
+# --- shell, CI and build quality -------------------------------------------------
+brew "shellcheck"      # what CI runs on install.sh and bin/*
+brew "shfmt"           # shell formatter
+brew "actionlint"      # lints .github/workflows
+brew "direnv"          # per-directory environment
+brew "hyperfine"       # command benchmarking
+
+# --- system and disk ---------------------------------------------------------------
+brew "htop"
+brew "ncdu"            # where did the disk go (~/ai/models is big)
+brew "duf"             # df, readable

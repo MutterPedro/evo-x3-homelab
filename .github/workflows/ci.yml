@@ -9,7 +9,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: shellcheck
-        run: shellcheck -S warning -x install.sh bin/evo bin/evo-notify tests/render-test.sh
+        run: shellcheck -S warning -x install.sh bin/evo bin/evo-notify bin/evo-memguard tests/render-test.sh
       - name: python deps
         run: pip install pyyaml jsonschema
       - name: fetch llama-swap (latest release)

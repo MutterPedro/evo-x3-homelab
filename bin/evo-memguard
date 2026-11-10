@@ -20,7 +20,7 @@
 set -uo pipefail
 
 # Settings come from the user's evo.env (the systemd unit also loads it).
-# shellcheck disable=SC1091
+# shellcheck source=/dev/null
 [[ -r "${EVO_ENV:-$HOME/.config/evo/evo.env}" ]] && source "${EVO_ENV:-$HOME/.config/evo/evo.env}"
 SOFT="${EVO_MEMGUARD_SOFT_GIB:-6}"
 HARD="${EVO_MEMGUARD_HARD_GIB:-3}"

@@ -5,6 +5,7 @@
 #   ./install.sh user     Services, configs, CLI. Safe to re-run any time.
 #   ./install.sh models   Download the default model set (~150 GB)
 #   ./install.sh all      system + user (then reboot, then `models`)
+#   ./install.sh devtools Developer tools for humans and agents via Homebrew (docs/14)
 #   ./install.sh zsh      Optional: zsh + Oh My Zsh + plugins + the `evo` prompt (docs/11)
 #
 # Every step is idempotent: re-running converges to the same state.
@@ -236,6 +237,18 @@ install_brew_tools() {
   fi
 }
 
+install_devtools() {
+  [[ -x "$BREW" ]] || die "Homebrew not found at $BREW"
+  step "Developer tools (config/Brewfile)"
+  # --no-upgrade: re-runs add what is missing and never churn what is installed
+  "$BREW" bundle --file "$REPO_DIR/config/Brewfile" --no-upgrade
+  local t missing=()
+  for t in node npm npx go cargo rustc gh jq yq rg fd bat shellcheck shfmt; do
+    command -v "$t" >/dev/null 2>&1 || [[ -x "$(dirname "$BREW")/$t" ]] || missing+=("$t")
+  done
+  if ((${#missing[@]})); then warn "not on PATH: ${missing[*]}"; else ok "devtools installed: node go rust gh jq yq rg fd bat shellcheck shfmt ..."; fi
+}
+
 install_llama_swap() {
   local ver cur=""
   # Download fully first, then parse in bash: piping curl into `grep -m1` makes
@@ -404,6 +417,7 @@ if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
     system) install_system ;;
     user)   install_user ;;
     models) install_models ;;
+    devtools) install_devtools ;;
     zsh)    install_zsh ;;
     all)    install_system; install_user ;;
     *) sed -n '2,10p' "$0"; exit 1 ;;

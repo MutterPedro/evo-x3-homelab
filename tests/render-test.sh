@@ -4,6 +4,17 @@
 # When a llama-swap binary is given, it also boots llama-swap with the rendered
 # config (no models are started) and exercises the API that `evo` relies on.
 set -euo pipefail
+
+# A Python with PyYAML. Homebrew's python3 (pulled in by node) can shadow the
+# system one and has no PyYAML, so try the usual suspects, then uv.
+PYTHON=""
+for cand in python3 /usr/bin/python3; do
+  if "$cand" -c 'import yaml' >/dev/null 2>&1; then PYTHON="$cand"; break; fi
+done
+if [[ -z "$PYTHON" ]] && command -v uv >/dev/null 2>&1; then
+  uv run --quiet --with pyyaml python -c 'import yaml' >/dev/null 2>&1 && PYTHON="uv run --quiet --with pyyaml python"
+fi
+[[ -n "$PYTHON" ]] || { echo "FAIL: no python3 with PyYAML (apt/dnf install python3-yaml, or install uv)"; exit 1; }
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
 export HOME="$T/home" XDG_CONFIG_HOME="$T/home/.config"
@@ -31,7 +42,7 @@ if grep -rn '@[A-Z0-9_]\+@' "$out"; then echo "FAIL: unrendered placeholders"; e
 echo "ok  all placeholders rendered"
 
 # 2. YAML parses and the llama-swap config is internally consistent
-python3 - "$out" "$REPO/config/models.tsv" <<'PY'
+$PYTHON - "$out" "$REPO/config/models.tsv" <<'PY'
 import sys, yaml, pathlib
 d = pathlib.Path(sys.argv[1])
 for f in ["llama-swap.yaml", "searxng.yml", "prometheus.yml", "ds.yaml", "comfy.yaml"]:
@@ -68,10 +79,10 @@ for pname, p in cfg["profiles"].items():
     assert total <= pool, f"profile {pname}: resident set needs {total} GiB, pool is {pool}"
 print("ok  capacities cover model weights; every profile's resident set fits the pool")
 PY
-python3 -c "import json; json.load(open('$REPO/config/grafana/dashboards/evo-x3.json'))" && echo "ok  dashboard JSON valid"
+$PYTHON -c "import json; json.load(open('$REPO/config/grafana/dashboards/evo-x3.json'))" && echo "ok  dashboard JSON valid"
 
 # 3. every model file referenced by llama-swap can be downloaded via models.tsv
-python3 - "$out/llama-swap.yaml" "$REPO/config/models.tsv" <<'PY'
+$PYTHON - "$out/llama-swap.yaml" "$REPO/config/models.tsv" <<'PY'
 import sys, re, fnmatch
 cfg = open(sys.argv[1]).read()
 paths = set(re.findall(r'\$\{m\}/(\S+)', cfg))
@@ -93,7 +104,7 @@ LS="${1:-}"
 if [[ -n "$LS" && -x "$LS" ]]; then
   schema="$(dirname "$LS")/config-schema.json"
   if [[ -f "$schema" ]]; then
-    python3 - "$out/llama-swap.yaml" "$schema" <<'PY'
+    $PYTHON - "$out/llama-swap.yaml" "$schema" <<'PY'
 import sys, yaml, json, jsonschema
 cfg, schema = yaml.safe_load(open(sys.argv[1])), json.load(open(sys.argv[2]))
 errs = list(jsonschema.validators.validator_for(schema)(schema).iter_errors(cfg))
@@ -116,9 +127,9 @@ PY
   if ! kill -0 "$pid" 2>/dev/null; then cat "$T/ls.log"; echo "FAIL: llama-swap rejected config"; exit 1; fi
   H="Authorization: Bearer $LLAMA_SWAP_KEY"
   curl -fs -H "$H" "127.0.0.1:$port/api/profiles" \
-    | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["active"]=="smart", d; print("ok  llama-swap loaded config; active profile:", d["active"])'
+    | $PYTHON -c 'import json,sys; d=json.load(sys.stdin); assert d["active"]=="smart", d; print("ok  llama-swap loaded config; active profile:", d["active"])'
   curl -fs -H "$H" "127.0.0.1:$port/v1/models" \
-    | python3 -c 'import json,sys; print("ok  /v1/models:", ", ".join(m["id"] for m in json.load(sys.stdin)["data"]))'
+    | $PYTHON -c 'import json,sys; print("ok  /v1/models:", ", ".join(m["id"] for m in json.load(sys.stdin)["data"]))'
   code=$(curl -s -o /dev/null -w '%{http_code}' "127.0.0.1:$port/v1/models")
   [[ "$code" == 401 ]] && echo "ok  API key enforced (401 without key)" || { echo "FAIL: expected 401, got $code"; exit 1; }
   curl -fs -X PUT -H "$H" "127.0.0.1:$port/api/profiles/active" -d '{"name":"fast"}' >/dev/null && echo "ok  profile switch"
